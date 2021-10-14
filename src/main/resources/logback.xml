@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <configuration scan="true" scanPeriod="1 minutes">
-    <property name="APP_LOG_LEVEL" value="${APP_LOG_LEVEL:-INFO}"/>
+    <property name="APP_LOG_LEVEL" value="${APP_LOG_LEVEL:-DEBUG}"/>
     <property name="AKKA_LOG_LEVEL" value="${AKKA_LOG_LEVEL:-DEBUG}"/>
     <property name="GLOBAL_LOG_LEVEL" value="${GLOBAL_LOG_LEVEL:-INFO}"/>
 

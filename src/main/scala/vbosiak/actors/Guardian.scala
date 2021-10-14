@@ -7,6 +7,7 @@ import akka.cluster.typed.Cluster
 import akka.management.scaladsl.AkkaManagement
 import com.typesafe.config.Config
 import vbosiak.actors.Worker.WorkerTopic
+import vbosiak.common.utils.ResourcesInspector
 
 object Guardian {
   def apply(config: Config): Behavior[Unit] =
@@ -21,8 +22,11 @@ object Guardian {
         val desiredWorkersCount = config.getInt("akka.cluster.required-num.workers")
         val masterRef           = context.spawn(Master(cluster, workerTopic), "master")
         context.spawn(Coordinator(cluster, masterRef, desiredWorkersCount), "coordinator")
-      } else
+      } else {
+        ResourcesInspector.inspectNode()
+
         context.spawn(Worker(cluster, workerTopic), "worker")
+      }
 
       Behaviors.empty[Unit]
     }
