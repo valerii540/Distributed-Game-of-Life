@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration scan="true" scanPeriod="1 minutes">
+    <property name="APP_LOG_LEVEL" value="${APP_LOG_LEVEL:-INFO}"/>
+    <property name="AKKA_LOG_LEVEL" value="${AKKA_LOG_LEVEL:-DEBUG}"/>
+    <property name="GLOBAL_LOG_LEVEL" value="${GLOBAL_LOG_LEVEL:-INFO}"/>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%highlight(%-5level) %date{ISO8601} %-25logger{25} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="asyncStdout" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="STDOUT"/>
+    </appender>
+
+    <logger name="vbosiak" level="${APP_LOG_LEVEL}"/>
+    <logger name="akka" level="${AKKA_LOG_LEVEL}"/>
+
+    <root level="${GLOBAL_LOG_LEVEL}">
+        <appender-ref ref="asyncStdout"/>
+    </root>
+</configuration>
