@@ -12,6 +12,7 @@ scalacOptions ++= Seq("-feature", "-Ywarn-dead-code", "-Ywarn-unused", "-depreca
 
 libraryDependencies ++= {
   val akka           = "2.6.17"
+  val akkaHttp       = "10.2.6"
   val akkaManagement = "1.1.1"
   val logback        = "1.2.6"
   val scalaLogging   = "3.9.4"
@@ -21,6 +22,10 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-cluster-typed"           % akka,
     "com.typesafe.akka"             %% "akka-cluster-sharding"        % akka,
     "com.typesafe.akka"             %% "akka-serialization-jackson"   % akka,
+    "com.typesafe.akka"             %% "akka-actor-typed"             % akka,
+    "com.typesafe.akka"             %% "akka-stream"                  % akka,
+    "com.typesafe.akka"             %% "akka-http"                    % akkaHttp,
+    "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,
     "com.lightbend.akka.management" %% "akka-management-cluster-http" % akkaManagement,
     "org.typelevel"                 %% "cats-core"                    % cats,
