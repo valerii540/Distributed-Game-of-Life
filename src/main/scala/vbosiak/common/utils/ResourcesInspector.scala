@@ -3,7 +3,7 @@ package vbosiak.common.utils
 import com.typesafe.scalalogging.StrictLogging
 
 object ResourcesInspector extends StrictLogging {
-  final case class Capabilities(availableMemory: Long, maxFiledSideSize: Long)
+  final case class Capabilities(availableMemory: Long, maxFiledSideSize: Int)
 
   private val preservedBytes = ConfigProvider.config.getBytes("resources.preserved")
 
@@ -33,7 +33,7 @@ object ResourcesInspector extends StrictLogging {
 
     Capabilities(
       availableMemory = availableMemory,
-      maxFiledSideSize = Math.floor(Math.sqrt(availableMemory.toDouble)).toLong
+      maxFiledSideSize = Math.floor(Math.sqrt(availableMemory.toDouble)).toInt
     )
   }
 }

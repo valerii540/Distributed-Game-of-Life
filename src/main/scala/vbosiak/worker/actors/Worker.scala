@@ -1,5 +1,6 @@
 package vbosiak.worker.actors
 
+import akka.Done
 import akka.actor.typed.pubsub.Topic
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
@@ -7,15 +8,15 @@ import akka.cluster.typed.Cluster
 import vbosiak.common.models.CborSerializable
 import vbosiak.common.utils.ResourcesInspector
 import vbosiak.master.actors.Master.{MasterCommand, WorkerCapabilities}
-import vbosiak.models.WorkerRep.Neighbors
+import vbosiak.models.Neighbors
 
 object Worker {
   type WorkerTopic = Topic.Command[Worker.WorkerCommand]
 
   sealed trait WorkerCommand extends CborSerializable
 
-  final case class TellCapabilities(replyTo: ActorRef[MasterCommand])   extends WorkerCommand
-  final case class NewAssignment(fieldSize: Long, neighbors: Neighbors) extends WorkerCommand
+  final case class TellCapabilities(replyTo: ActorRef[MasterCommand])                           extends WorkerCommand
+  final case class NewSimulation(replyTo: ActorRef[Done], fieldSize: Int, neighbors: Neighbors) extends WorkerCommand
 
   def apply(cluster: Cluster, workerTopic: ActorRef[WorkerTopic]): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
@@ -36,17 +37,20 @@ object Worker {
 
   def initialLifeCycle(master: ActorRef[MasterCommand]): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
-      Behaviors.receiveMessagePartial {
-        case NewAssignment(fieldSize, neighbors) =>
-          gameLifeCycle(master, neighbors)
+      Behaviors.receiveMessagePartial { case NewSimulation(replyTo, fieldSize, neighbors) =>
+        val filed = Array.ofDim[Boolean](fieldSize, fieldSize)
+
+        context.log.info("Created {}x{} empty field", filed.length, filed.head.length)
+
+        replyTo ! Done
+        gameLifeCycle(master, neighbors, filed)
       }
     }
 
-  def gameLifeCycle(master: ActorRef[MasterCommand], neighbors: Neighbors): Behavior[WorkerCommand] =
-    Behaviors.setup { context =>
-
-      Behaviors.receiveMessage {
-        ???
-      }
-    }
+  def gameLifeCycle(
+      master: ActorRef[MasterCommand],
+      neighbors: Neighbors,
+      field: Array[Array[Boolean]]
+  ): Behavior[WorkerCommand] =
+    Behaviors.setup(context => Behaviors.empty)
 }

@@ -16,7 +16,6 @@ libraryDependencies ++= {
   val akkaManagement = "1.1.1"
   val logback        = "1.2.6"
   val scalaLogging   = "3.9.4"
-  val cats           = "2.6.1"
 
   Seq(
     "com.typesafe.akka"             %% "akka-cluster-typed"           % akka,
@@ -28,7 +27,6 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,
     "com.lightbend.akka.management" %% "akka-management-cluster-http" % akkaManagement,
-    "org.typelevel"                 %% "cats-core"                    % cats,
     "ch.qos.logback"                 % "logback-classic"              % logback,
     "com.typesafe.scala-logging"    %% "scala-logging"                % scalaLogging
   )

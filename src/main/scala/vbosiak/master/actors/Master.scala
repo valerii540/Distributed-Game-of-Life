@@ -1,15 +1,18 @@
 package vbosiak.master.actors
 
+import akka.Done
 import akka.actor.typed.pubsub.Topic
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.typed._
-import cats.data.Ior
+import akka.util.Timeout
 import vbosiak.common.models.CborSerializable
 import vbosiak.common.utils.ResourcesInspector.Capabilities
-import vbosiak.models.WorkerRep
+import vbosiak.models.{Neighbors, WorkerRep}
 import vbosiak.worker.actors.Worker
 import vbosiak.worker.actors.Worker.{WorkerCommand, WorkerTopic}
+
+import scala.concurrent.duration.DurationInt
 
 object Master {
   final case class GameProperties(fieldSize: Long)
@@ -22,6 +25,7 @@ object Master {
   /** Actor commands */
   sealed trait MasterCommand                                                                       extends CborSerializable
   final case class ClusterIsReady(workersCount: Int)                                               extends MasterCommand
+  case object ClusterNotReady                                                                      extends MasterCommand
   final case class WorkerCapabilities(capabilities: Capabilities, worker: ActorRef[WorkerCommand]) extends MasterCommand
   final case class StartGame(replyTo: ActorRef[ControllerResponse])                                extends MasterCommand
 
@@ -44,6 +48,8 @@ object Master {
           workerTopic ! Topic.Publish(Worker.TellCapabilities(context.self))
           initialLifeCycle(workerTopic, workersCount, Vector.empty)
 
+        case ClusterNotReady => initialLifeCycle(workerTopic, 0, Vector.empty)
+
         case WorkerCapabilities(capabilities, worker) =>
           context.log.debug("Received {} capabilities {}", worker, capabilities)
           if (workers.size + 1 == workersCount) {
@@ -52,13 +58,13 @@ object Master {
               val leftNeighbor  = Option.when(allWorkers.isDefinedAt(i - 1))(allWorkers(i - 1)._1)
               val rightNeighbor = Option.when(allWorkers.isDefinedAt(i + 1))(allWorkers(i + 1)._1)
 
-              WorkerRep(w._1, Ior.fromOptions(leftNeighbor, rightNeighbor).get, w._2)
+              WorkerRep(w._1, Neighbors(leftNeighbor, rightNeighbor), w._2)
             }
 
             val weakestWorker = workersRep.minBy(_.capabilities.maxFiledSideSize)
 
             context.log.info(
-              "Received all info about workers. Weakest worker can handle only {}x{} field ({}GB). Waiting for start command",
+              "Collected all info about workers. Weakest worker can handle only {}x{} field ({}GB). Waiting for start command",
               weakestWorker.capabilities.maxFiledSideSize,
               weakestWorker.capabilities.maxFiledSideSize,
               weakestWorker.capabilities.availableMemory / (1024 * 1024 * 1024)
@@ -69,18 +75,27 @@ object Master {
       }
     }
 
-  private def idle(workers: List[WorkerRep], maxFieldSize: Long): Behavior[MasterCommand] =
-    Behaviors.receiveMessagePartial { case StartGame(replyTo) =>
-      replyTo ! OK
-      gameLifeCycle(workers, GameProperties(maxFieldSize))
+  private def idle(workers: List[WorkerRep], maxFieldSize: Int): Behavior[MasterCommand] =
+    Behaviors.setup { context =>
+      Behaviors.receiveMessagePartial { case StartGame(replyTo) =>
+        import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
+        implicit val timeout: Timeout             = 5.seconds
+        implicit val system: ActorSystem[Nothing] = context.system
+
+        replyTo ! OK
+
+        //TODO: parallelize asking
+        workers.map(worker => worker.actor.ask[Done](Worker.NewSimulation(_, maxFieldSize, worker.neighbors)))
+
+        gameLifeCycle(workers, GameProperties(maxFieldSize))
+      }
     }
 
   private def gameLifeCycle(workers: List[WorkerRep], gameProperties: GameProperties): Behavior[MasterCommand] =
     Behaviors.setup { context =>
-      Behaviors.receiveMessage {
-        case StartGame(replyTo) =>
-          replyTo ! AlreadyRunning
-          Behaviors.same
+      Behaviors.receiveMessage { case StartGame(replyTo) =>
+        replyTo ! AlreadyRunning
+        Behaviors.same
       }
     }
 }

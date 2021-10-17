@@ -4,6 +4,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.cluster.ClusterEvent.{MemberEvent, MemberExited, MemberUp}
 import akka.cluster.typed.{Cluster, Subscribe}
+import vbosiak.master.actors.Master.ClusterNotReady
 
 object Coordinator {
   def apply(cluster: Cluster, masterRef: ActorRef[Master.MasterCommand], desiredWorkersCount: Int): Behavior[MemberEvent] =
@@ -32,6 +33,7 @@ object Coordinator {
           coordinatorLifeCycle(workerCounter + 1, desiredWorkersCount, masterRef)
         case MemberExited(member) if member.hasRole("worker") =>
           context.log.warn("{} have left the cluster", member)
+          masterRef ! ClusterNotReady
           coordinatorLifeCycle(workerCounter - 1, desiredWorkersCount, masterRef)
         case _                                                =>
           Behaviors.same
