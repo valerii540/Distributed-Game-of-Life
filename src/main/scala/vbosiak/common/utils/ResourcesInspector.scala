@@ -1,10 +1,9 @@
 package vbosiak.common.utils
 
 import com.typesafe.scalalogging.StrictLogging
+import vbosiak.common.models.Capabilities
 
 object ResourcesInspector extends StrictLogging {
-  final case class Capabilities(availableMemory: Long, maxFiledSideSize: Int)
-
   private val preservedBytes = ConfigProvider.config.getBytes("resources.preserved")
 
   def inspectNode(): Unit = {
@@ -29,7 +28,7 @@ object ResourcesInspector extends StrictLogging {
     if (maxMemory <= preservedBytes)
       throw new OutOfMemoryError("Max memory is lower than preserved")
 
-    val availableMemory = maxMemory - preservedBytes
+    val availableMemory = (maxMemory / 2) - preservedBytes
 
     Capabilities(
       availableMemory = availableMemory,

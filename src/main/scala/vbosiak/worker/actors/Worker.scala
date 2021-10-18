@@ -5,10 +5,9 @@ import akka.actor.typed.pubsub.Topic
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.cluster.typed.Cluster
-import vbosiak.common.models.CborSerializable
+import vbosiak.common.models.{CborSerializable, Neighbors}
 import vbosiak.common.utils.ResourcesInspector
 import vbosiak.master.actors.Master.{MasterCommand, WorkerCapabilities}
-import vbosiak.models.Neighbors
 
 object Worker {
   type WorkerTopic = Topic.Command[Worker.WorkerCommand]

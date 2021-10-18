@@ -6,9 +6,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.typed._
 import akka.util.Timeout
-import vbosiak.common.models.CborSerializable
-import vbosiak.common.utils.ResourcesInspector.Capabilities
-import vbosiak.models.{Neighbors, WorkerRep}
+import vbosiak.common.models.{Capabilities, CborSerializable, Neighbors, WorkerRep}
 import vbosiak.worker.actors.Worker
 import vbosiak.worker.actors.Worker.{WorkerCommand, WorkerTopic}
 
@@ -55,8 +53,8 @@ object Master {
           if (workers.size + 1 == workersCount) {
             val allWorkers = workers :+ (worker, capabilities)
             val workersRep = allWorkers.zipWithIndex.map { case (w, i) =>
-              val leftNeighbor  = Option.when(allWorkers.isDefinedAt(i - 1))(allWorkers(i - 1)._1)
-              val rightNeighbor = Option.when(allWorkers.isDefinedAt(i + 1))(allWorkers(i + 1)._1)
+              val leftNeighbor  = if (allWorkers.isDefinedAt(i - 1)) allWorkers(i - 1)._1 else allWorkers.last._1
+              val rightNeighbor = if (allWorkers.isDefinedAt(i + 1)) allWorkers(i + 1)._1 else allWorkers.head._1
 
               WorkerRep(w._1, Neighbors(leftNeighbor, rightNeighbor), w._2)
             }
