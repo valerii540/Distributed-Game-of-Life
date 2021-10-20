@@ -8,7 +8,7 @@ import scala.io.StdIn
 
 object Main extends App {
   private val config                    = ConfigProvider.config
-  private val system: ActorSystem[Unit] = ActorSystem(Guardian(config), config.getString("akka.actor.system-name"))
+  private val system: ActorSystem[Unit] = ActorSystem(Guardian(), config.getString("akka.actor.system-name"))
 
   //TODO: remove this development trick later
   StdIn.readLine()

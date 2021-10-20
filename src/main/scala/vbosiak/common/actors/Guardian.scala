@@ -5,9 +5,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.cluster.typed.Cluster
 import akka.http.scaladsl.Http
-import akka.management.cluster.scaladsl.ClusterHttpManagementRoutes
 import akka.management.scaladsl.AkkaManagement
-import com.typesafe.config.Config
 import vbosiak.common.utils.ResourcesInspector
 import vbosiak.master.actors.{Coordinator, Master}
 import vbosiak.master.controllers.MasterController
@@ -18,7 +16,7 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContextExecutor}
 
 object Guardian {
-  def apply(config: Config): Behavior[Unit] =
+  def apply(): Behavior[Unit] =
     Behaviors.setup { context =>
       val cluster                            = Cluster(context.system)
       val workerTopic: ActorRef[WorkerTopic] =
@@ -27,9 +25,8 @@ object Guardian {
       if (cluster.selfMember.hasRole("master")) {
         val managementRoutes = AkkaManagement(context.system).routes
 
-        val desiredWorkersCount = config.getInt("akka.cluster.required-num.workers")
-        val masterRef           = context.spawn(Master(cluster, workerTopic), "master")
-        context.spawn(Coordinator(cluster, masterRef, desiredWorkersCount), "coordinator")
+        val masterRef = context.spawn(Master(cluster, workerTopic), "master")
+        context.spawn(Coordinator(cluster, masterRef), "coordinator")
 
         implicit val system: ActorSystem[Nothing] = context.system
         val masterController                      = new MasterController(masterRef)

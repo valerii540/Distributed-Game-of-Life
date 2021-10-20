@@ -19,8 +19,9 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
     path("game" / "start") {
       post {
         onSuccess(master.ask(Master.StartGame)) {
-          case Master.OK             => complete(StatusCodes.OK)
-          case Master.AlreadyRunning => complete(StatusCodes.Conflict, "Cluster already running simulation")
+          case Master.OK                 => complete(StatusCodes.OK)
+          case Master.AlreadyRunning     => complete(StatusCodes.Conflict, "Cluster already running simulation")
+          case Master.NoWorkersInCluster => complete(StatusCodes.Conflict, "No workers connected to cluster")
         }
       }
     } ~ managementRoutes
