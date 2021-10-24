@@ -5,10 +5,12 @@ import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.typed._
 import akka.util.Timeout
 import vbosiak.common.models._
+import vbosiak.master.models.{Mode, UserParameters}
 import vbosiak.worker.actors.Worker
-import vbosiak.worker.actors.Worker.{TellCapabilities, WorkerCommand, WorkerTopic}
+import vbosiak.worker.actors.Worker.{TellCapabilities, WorkerCommand}
 
-import scala.concurrent.duration.DurationInt
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.{Duration, DurationInt}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -27,21 +29,20 @@ object Master {
   final case class WorkerIsReady(ref: ActorRef[WorkerCommand])                                     extends MasterCommand
   case object ClusterNotReady                                                                      extends MasterCommand
   final case class WorkerCapabilities(capabilities: Capabilities, worker: ActorRef[WorkerCommand]) extends MasterCommand
-  final case class StartGame(replyTo: ActorRef[ControllerResponse])                                extends MasterCommand
+  final case class StartGame(replyTo: ActorRef[ControllerResponse], params: UserParameters)        extends MasterCommand
 
   private final case class WorkerIsReadyInternal(workerRef: ActorRef[WorkerCommand], capabilities: Capabilities) extends MasterCommand
   private final case class StartSimulation()                                                                     extends MasterCommand
   private final case class IterationDone(results: List[WorkerIterationResult])                                   extends MasterCommand
 
-  def apply(cluster: Cluster, workerTopic: ActorRef[WorkerTopic]): Behavior[MasterCommand] =
+  def apply(cluster: Cluster): Behavior[MasterCommand] =
     Behaviors.setup { context =>
       context.log.info("Hello, I'm master {} at {}", context.self.path, cluster.selfMember.address)
 
-      setupLifeCycle(workerTopic, Vector.empty)
+      setupLifeCycle(Vector.empty)
     }
 
   private def setupLifeCycle(
-      workerTopic: ActorRef[WorkerTopic],
       workers: Vector[(ActorRef[WorkerCommand], Capabilities)]
   ): Behavior[MasterCommand] =
     Behaviors.setup { context =>
@@ -56,22 +57,22 @@ object Master {
           Behaviors.same
 
         case WorkerIsReadyInternal(workerRef, capabilities) =>
-          setupLifeCycle(workerTopic, workers :+ (workerRef, capabilities))
+          setupLifeCycle(workers :+ (workerRef, capabilities))
 
-        case StartGame(controller) =>
+        case StartGame(controller, params) =>
           if (workers.isEmpty) {
             controller ! NoWorkersInCluster
             Behaviors.same
           } else {
             controller ! OK
-            prepareSimulation(workers)
+            prepareSimulation(workers, params)
           }
 
-        case ClusterNotReady => setupLifeCycle(workerTopic, Vector.empty)
+        case ClusterNotReady => setupLifeCycle(Vector.empty)
       }
     }
 
-  private def prepareSimulation(workers: Vector[(ActorRef[WorkerCommand], Capabilities)]): Behavior[MasterCommand] =
+  private def prepareSimulation(workers: Vector[(ActorRef[WorkerCommand], Capabilities)], params: UserParameters): Behavior[MasterCommand] =
     Behaviors.setup { context =>
       import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
       implicit val ec: ExecutionContext         = context.system.executionContext
@@ -101,10 +102,17 @@ object Master {
           case Failure(exception) => throw exception
         }
 
-      gameLifeCycle(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize)
+      params match {
+        case UserParameters(Mode.Fastest, _)       =>
+          fastestModeBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize)
+        case UserParameters(Mode.Manual, _)        =>
+          manualModeBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize)
+        case UserParameters(Mode.SoftTimed, delay) =>
+          softTimedBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize, Duration(delay.get, TimeUnit.SECONDS))
+      }
     }
 
-  private def gameLifeCycle(workers: List[WorkerRep], state: State, fieldSize: Int): Behavior[MasterCommand] =
+  private def fastestModeBehaviour(workers: List[WorkerRep], state: State, fieldSize: Int): Behavior[MasterCommand] =
     Behaviors.setup { context =>
       import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
       implicit val ec: ExecutionContext         = context.system.executionContext
@@ -113,11 +121,13 @@ object Master {
 
       def nextIteration(): Behavior[MasterCommand] = {
         Future
-          .traverse(workers)(_.actor.ask(Worker.NextIteration)).onComplete {
+          .traverse(workers)(_.actor.ask(Worker.NextIteration))
+          .flatMap(stats => Future.traverse(workers)(_.actor.ask(Worker.SwapState)).map(_ => stats))
+          .onComplete {
             case Success(stats)     => context.self ! IterationDone(stats)
             case Failure(exception) => throw exception
           }
-        gameLifeCycle(workers, state.copy(iteration = state.iteration + 1), fieldSize)
+        fastestModeBehaviour(workers, state.copy(iteration = state.iteration + 1), fieldSize)
       }
 
       Behaviors.receiveMessage {
@@ -127,26 +137,19 @@ object Master {
           nextIteration()
 
         case IterationDone(results) =>
-          if (results.forall(_.result.isRight)) {
-            results.foreach { stat =>
-              context.log.info("Worker {} completed iteration {} with {} population remaining", stat.ref, state.iteration, stat.result)
-            }
-
-            nextIteration()
-          } else {
-            results.foreach {
-              case WorkerIterationResult(ref, Left(failure)) =>
-                context.log.warn("Worker {} failed iteration {} because of {}", ref, state.iteration, failure)
-              case WorkerIterationResult(ref, Right(stat))   =>
-                context.log.info("Worker {} completed iteration {} with {} population remaining", ref, state.iteration, stat.population)
-            }
-
-            Behaviors.ignore
+          results.foreach { result =>
+            context.log.info("Worker {} completed iteration {} with {} population remaining", result.ref, state.iteration, result.stats.population)
           }
 
-        case StartGame(replyTo) =>
+          nextIteration()
+
+        case StartGame(replyTo, _) =>
           replyTo ! AlreadyRunning
           Behaviors.same
       }
     }
+
+  private def manualModeBehaviour(workers: List[WorkerRep], state: State, fieldSize: Int): Behavior[MasterCommand] = ???
+
+  private def softTimedBehaviour(workers: List[WorkerRep], state: State, fieldSize: Int, delay: Duration): Behavior[MasterCommand] = ???
 }

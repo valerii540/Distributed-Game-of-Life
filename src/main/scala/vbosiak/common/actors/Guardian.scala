@@ -1,8 +1,7 @@
 package vbosiak.common.actors
 
-import akka.actor.typed.pubsub.Topic
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
+import akka.actor.typed.{ActorSystem, Behavior, PostStop}
 import akka.cluster.typed.Cluster
 import akka.http.scaladsl.Http
 import akka.management.scaladsl.AkkaManagement
@@ -10,7 +9,6 @@ import vbosiak.common.utils.ResourcesInspector
 import vbosiak.master.actors.{Coordinator, Master}
 import vbosiak.master.controllers.MasterController
 import vbosiak.worker.actors.Worker
-import vbosiak.worker.actors.Worker.WorkerTopic
 
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContextExecutor}
@@ -18,14 +16,12 @@ import scala.concurrent.{Await, ExecutionContextExecutor}
 object Guardian {
   def apply(): Behavior[Unit] =
     Behaviors.setup { context =>
-      val cluster                            = Cluster(context.system)
-      val workerTopic: ActorRef[WorkerTopic] =
-        context.spawn(Topic[Worker.WorkerCommand]("worker-topic"), "worker-topic-actor")
+      val cluster = Cluster(context.system)
 
       if (cluster.selfMember.hasRole("master")) {
         val managementRoutes = AkkaManagement(context.system).routes
 
-        val masterRef = context.spawn(Master(cluster, workerTopic), "master")
+        val masterRef = context.spawn(Master(cluster), "master")
         context.spawn(Coordinator(cluster, masterRef), "coordinator")
 
         implicit val system: ActorSystem[Nothing] = context.system
@@ -40,7 +36,7 @@ object Guardian {
       } else {
         ResourcesInspector.inspectNode()
 
-        context.spawn(Worker(cluster, workerTopic), "worker")
+        context.spawn(Worker(cluster), "worker")
         Behaviors.empty
       }
     }

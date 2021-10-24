@@ -16,6 +16,8 @@ libraryDependencies ++= {
   val akkaManagement = "1.1.1"
   val logback        = "1.2.6"
   val scalaLogging   = "3.9.4"
+  val enumeratum     = "1.7.0"
+  val akkaPlayJson   = "1.38.2"
 
   val scalaTest = "3.2.10"
 
@@ -29,6 +31,9 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,
     "com.lightbend.akka.management" %% "akka-management-cluster-http" % akkaManagement,
+    "com.beachape"                  %% "enumeratum"                   % enumeratum,
+    "com.beachape"                  %% "enumeratum-play-json"         % enumeratum,
+    "de.heikoseeberger"             %% "akka-http-play-json"          % akkaPlayJson,
     "ch.qos.logback"                 % "logback-classic"              % logback,
     "com.typesafe.scala-logging"    %% "scala-logging"                % scalaLogging,
     "org.scalatest"                 %% "scalatest-wordspec"           % scalaTest % Test,
