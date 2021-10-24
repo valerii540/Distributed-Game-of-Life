@@ -17,6 +17,8 @@ libraryDependencies ++= {
   val logback        = "1.2.6"
   val scalaLogging   = "3.9.4"
 
+  val scalaTest = "3.2.10"
+
   Seq(
     "com.typesafe.akka"             %% "akka-cluster-typed"           % akka,
     "com.typesafe.akka"             %% "akka-cluster-sharding"        % akka,
@@ -28,6 +30,8 @@ libraryDependencies ++= {
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,
     "com.lightbend.akka.management" %% "akka-management-cluster-http" % akkaManagement,
     "ch.qos.logback"                 % "logback-classic"              % logback,
-    "com.typesafe.scala-logging"    %% "scala-logging"                % scalaLogging
+    "com.typesafe.scala-logging"    %% "scala-logging"                % scalaLogging,
+    "org.scalatest"                 %% "scalatest-wordspec"           % scalaTest % Test,
+    "org.scalatest"                 %% "scalatest-mustmatchers"       % scalaTest % Test
   )
 }
