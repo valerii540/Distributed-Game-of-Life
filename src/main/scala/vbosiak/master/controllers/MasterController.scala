@@ -14,21 +14,41 @@ import scala.concurrent.duration.DurationInt
 
 final class MasterController(master: ActorRef[MasterCommand])(implicit system: ActorSystem[Nothing]) extends PlayJsonSupport {
   import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
-  implicit val timeout: Timeout = 3.seconds
+  implicit val timeout: Timeout = 10.seconds
 
   def routes(managementRoutes: Route): Route =
-    path("game" / "start") {
+    path("simulation" / "init") {
       post {
         entity(as[UserParameters]) { params =>
           if (params.mode == Mode.SoftTimed && params.delay.isEmpty)
             complete(StatusCodes.BadRequest, "Missing the 'delay' parameter for soft-timed mode")
           else
-            onSuccess(master.ask(Master.StartGame(_, params))) {
+            onSuccess(master.ask(Master.PrepareSimulation(_, params))) {
               case Master.OK                 => complete(StatusCodes.OK)
-              case Master.AlreadyRunning     => complete(StatusCodes.Conflict, "Cluster already running simulation")
+              case Master.AlreadyRunning     => complete(StatusCodes.BadRequest, "Cluster already running simulation")
               case Master.NoWorkersInCluster => complete(StatusCodes.Conflict, "No workers connected to cluster")
             }
         }
       }
-    } ~ managementRoutes
+    } ~ {
+      path("simulation" / "next") {
+        patch {
+          onSuccess(master.ask(Master.ManualTrigger)) {
+            case Master.OK             => complete(StatusCodes.OK)
+            case Master.AlreadyRunning => complete(StatusCodes.BadRequest, "The previous iteration is not completed yet")
+            case _                     => complete(StatusCodes.InternalServerError)
+          }
+        }
+      }
+    } ~ {
+      path("cluster" / "stats") {
+        get {
+          onSuccess(master.ask(Master.TellClusterStatus)) {
+            complete(_)
+          }
+        }
+      }
+    } ~
+      managementRoutes
+
 }

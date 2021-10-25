@@ -5,12 +5,12 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.cluster.typed.Cluster
 import akka.util.Timeout
-import vbosiak.common.models.{CborSerializable, Neighbors, WorkerIterationResult, WorkerIterationStats}
+import vbosiak.common.models._
 import vbosiak.common.utils.ResourcesInspector
-import vbosiak.master.actors.Master.{MasterCommand, WorkerCapabilities}
 import vbosiak.worker.models.WorkerBehaviour
 
-import scala.concurrent.duration.DurationInt
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success}
 
 object Worker {
@@ -19,7 +19,7 @@ object Worker {
 
   sealed trait WorkerCommand extends CborSerializable
 
-  final case class TellCapabilities(replyTo: ActorRef[MasterCommand])                           extends WorkerCommand
+  final case class TellCapabilities(replyTo: ActorRef[Capabilities])                            extends WorkerCommand
   final case class TellStatus(replyTo: ActorRef[WorkerBehaviour])                               extends WorkerCommand
   final case class NewSimulation(replyTo: ActorRef[Done], fieldSize: Int, neighbors: Neighbors) extends WorkerCommand
   final case class NextIteration(replyTo: ActorRef[WorkerIterationResult])                      extends WorkerCommand
@@ -45,7 +45,7 @@ object Worker {
           Behaviors.same
 
         case TellCapabilities(replyTo) =>
-          replyTo ! WorkerCapabilities(ResourcesInspector.processingCapabilities, context.self)
+          replyTo ! ResourcesInspector.processingCapabilities
           Behaviors.same
 
         case NewSimulation(replyTo, fieldSize, neighbors) =>
@@ -126,6 +126,19 @@ object Worker {
         case TellFieldRightSide(replyTo) =>
           replyTo ! field.map(_.last)
           Behaviors.same
+
+        case newSimulation: NewSimulation =>
+          context.log.info("Resetting self to initial state and start preparing new simulation")
+          context.self ! newSimulation
+          initialLifeCycle()
+
+        case AskingFailure(throwable) =>
+          context.log.error("Failure during neighbor communication", throwable)
+          Behaviors.stopped
+
+        case wrong =>
+          context.log.error("Received {} is multiWorkerSimulation behaviour", wrong)
+          Behaviors.same
       }
     }
 
@@ -142,6 +155,8 @@ object Worker {
     }
 
   def computeNextIteration(field: Field, leftSide: Vector[Boolean], rightSide: Vector[Boolean]): (Field, WorkerIterationStats) = {
+    val startedAt = System.nanoTime()
+
     val fieldCopy  = field.map(_.toArray)
     var population = 0
 
@@ -168,7 +183,10 @@ object Worker {
         fieldCopy(r)(c) = false
     }
 
-    fieldCopy.map(_.toVector) -> WorkerIterationStats(population)
+    val finishedField = fieldCopy.map(_.toVector)
+    val duration      = FiniteDuration(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS)
+
+    finishedField -> WorkerIterationStats(duration, population)
   }
 
   private def computeCell(field: Field, r: Int, c: Int, neighborSide: Vector[Boolean] = Vector.empty): Boolean =
