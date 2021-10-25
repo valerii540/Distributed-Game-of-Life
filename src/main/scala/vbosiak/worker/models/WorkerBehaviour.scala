@@ -7,6 +7,6 @@ sealed trait WorkerBehaviour extends EnumEntry
 object WorkerBehaviour extends Enum[WorkerBehaviour] {
   override val values: IndexedSeq[WorkerBehaviour] = findValues
 
-  case object IDE                                 extends WorkerBehaviour
+  case object Idle                                extends WorkerBehaviour
   final case class Processing(standLone: Boolean) extends WorkerBehaviour
 }

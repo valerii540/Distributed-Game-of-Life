@@ -14,7 +14,8 @@ import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 object Worker {
-  type Field = Vector[Vector[Boolean]]
+  type Field          = Vector[Vector[Boolean]]
+  type NeighborsSides = (Option[Vector[Boolean]], Option[Vector[Boolean]])
 
   sealed trait WorkerCommand extends CborSerializable
 
@@ -22,7 +23,6 @@ object Worker {
   final case class TellStatus(replyTo: ActorRef[WorkerBehaviour])                               extends WorkerCommand
   final case class NewSimulation(replyTo: ActorRef[Done], fieldSize: Int, neighbors: Neighbors) extends WorkerCommand
   final case class NextIteration(replyTo: ActorRef[WorkerIterationResult])                      extends WorkerCommand
-  final case class SwapState(replyTo: ActorRef[Done])                                           extends WorkerCommand
   final case class TellFieldLeftSide(replyTo: ActorRef[Vector[Boolean]])                        extends WorkerCommand
   final case class TellFieldRightSide(replyTo: ActorRef[Vector[Boolean]])                       extends WorkerCommand
 
@@ -41,7 +41,7 @@ object Worker {
     Behaviors.setup { context =>
       Behaviors.receiveMessage {
         case TellStatus(replyTo) =>
-          replyTo ! WorkerBehaviour.IDE
+          replyTo ! WorkerBehaviour.Idle
           Behaviors.same
 
         case TellCapabilities(replyTo) =>
@@ -61,7 +61,7 @@ object Worker {
             singleWorkerSimulationBehaviour(field)
           } else {
             context.log.debug("Working in the multi worker mode")
-            multiWorkerSimulationBehaviour(neighbors, field)
+            multiWorkerSimulationBehaviour(neighbors, Vector.empty, (None, None), field)
           }
 
         case wrong =>
@@ -73,7 +73,7 @@ object Worker {
   private def multiWorkerSimulationBehaviour(
       workerNeighbors: Neighbors,
       field: Field,
-      neighborsSides: (Option[Vector[Boolean]], Option[Vector[Boolean]]) = (None, None),
+      neighborsSides: NeighborsSides = (None, None),
       nextField: Field = Vector.empty
   ): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
@@ -97,7 +97,7 @@ object Worker {
             case Failure(exception) => AskingFailure(exception)
           }
 
-          Behaviors.same
+          multiWorkerSimulationBehaviour(workerNeighbors, nextField)
 
         case UpdateLeftSide(replyTo, side) =>
           if (neighborsSides._2.isDefined) {
@@ -105,7 +105,7 @@ object Worker {
 
             replyTo ! WorkerIterationResult(context.self, stats)
 
-            multiWorkerSimulationBehaviour(workerNeighbors, newField)
+            multiWorkerSimulationBehaviour(workerNeighbors, field, (None, None), newField)
           } else
             multiWorkerSimulationBehaviour(workerNeighbors, field, neighborsSides.copy(_1 = Some(side)))
 
@@ -115,7 +115,7 @@ object Worker {
 
             replyTo ! WorkerIterationResult(context.self, stats)
 
-            multiWorkerSimulationBehaviour(workerNeighbors, newField)
+            multiWorkerSimulationBehaviour(workerNeighbors, field, (None, None), newField)
           } else
             multiWorkerSimulationBehaviour(workerNeighbors, field, neighborsSides.copy(_2 = Some(side)))
 

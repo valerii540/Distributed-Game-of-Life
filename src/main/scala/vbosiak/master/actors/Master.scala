@@ -122,7 +122,6 @@ object Master {
       def nextIteration(): Behavior[MasterCommand] = {
         Future
           .traverse(workers)(_.actor.ask(Worker.NextIteration))
-          .flatMap(stats => Future.traverse(workers)(_.actor.ask(Worker.SwapState)).map(_ => stats))
           .onComplete {
             case Success(stats)     => context.self ! IterationDone(stats)
             case Failure(exception) => throw exception
