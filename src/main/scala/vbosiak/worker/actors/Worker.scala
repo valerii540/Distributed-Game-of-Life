@@ -1,43 +1,53 @@
 package vbosiak.worker.actors
 
 import akka.Done
+import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.cluster.typed.Cluster
 import akka.util.Timeout
 import vbosiak.common.models._
-import vbosiak.common.utils.ResourcesInspector
+import vbosiak.common.utils.FieldFormatter._
+import vbosiak.common.utils.{Clock, ResourcesInspector}
 import vbosiak.worker.models.WorkerBehaviour
 
 import java.util.concurrent.TimeUnit
+import scala.collection.immutable.ArraySeq
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 object Worker {
-  type Field          = Vector[Vector[Boolean]]
-  type NeighborsSides = (Option[Vector[Boolean]], Option[Vector[Boolean]])
+  type Field          = ArraySeq[ArraySeq[Boolean]]
+  type NeighborsSides = (Option[ArraySeq[Boolean]], Option[ArraySeq[Boolean]])
+
+  val workerServiceKey: ServiceKey[WorkerCommand] = ServiceKey("worker")
 
   sealed trait WorkerCommand extends CborSerializable
 
-  final case class TellCapabilities(replyTo: ActorRef[Capabilities])                            extends WorkerCommand
-  final case class TellStatus(replyTo: ActorRef[WorkerBehaviour])                               extends WorkerCommand
-  final case class NewSimulation(replyTo: ActorRef[Done], fieldSize: Int, neighbors: Neighbors) extends WorkerCommand
-  final case class NextIteration(replyTo: ActorRef[WorkerIterationResult])                      extends WorkerCommand
-  final case class TellFieldLeftSide(replyTo: ActorRef[Vector[Boolean]])                        extends WorkerCommand
-  final case class TellFieldRightSide(replyTo: ActorRef[Vector[Boolean]])                       extends WorkerCommand
+  case object Reset                                                                                                extends WorkerCommand
+  final case class TellCapabilities(replyTo: ActorRef[Capabilities])                                               extends WorkerCommand
+  final case class TellStatus(replyTo: ActorRef[WorkerBehaviour])                                                  extends WorkerCommand
+  final case class NewSimulation(replyTo: ActorRef[Done], fieldSize: Int, lifeFactor: Float, neighbors: Neighbors) extends WorkerCommand
+  final case class NextIteration(replyTo: ActorRef[WorkerIterationResult])                                         extends WorkerCommand
+  final case class TellFieldLeftSide(replyTo: ActorRef[ArraySeq[Boolean]])                                         extends WorkerCommand
+  final case class TellFieldRightSide(replyTo: ActorRef[ArraySeq[Boolean]])                                        extends WorkerCommand
 
-  private final case class UpdateLeftSide(replyTo: ActorRef[WorkerIterationResult], side: Vector[Boolean])  extends WorkerCommand
-  private final case class UpdateRightSide(replyTo: ActorRef[WorkerIterationResult], side: Vector[Boolean]) extends WorkerCommand
-  private final case class AskingFailure(throwable: Throwable)                                              extends WorkerCommand
+  case object ShowYourField extends WorkerCommand
+
+  private final case class UpdateLeftSide(replyTo: ActorRef[WorkerIterationResult], side: ArraySeq[Boolean])  extends WorkerCommand
+  private final case class UpdateRightSide(replyTo: ActorRef[WorkerIterationResult], side: ArraySeq[Boolean]) extends WorkerCommand
+  private final case class AskingFailure(throwable: Throwable)                                                extends WorkerCommand
 
   def apply(cluster: Cluster): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
       context.log.info("Hello, I'm worker {} at {}", context.self.path, cluster.selfMember.address)
 
-      initialLifeCycle()
+      context.system.receptionist ! Receptionist.Register(workerServiceKey, context.self)
+
+      initialBehaviour()
     }
 
-  private def initialLifeCycle(): Behavior[WorkerCommand] =
+  private def initialBehaviour(): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
       Behaviors.receiveMessage {
         case TellStatus(replyTo) =>
@@ -48,10 +58,12 @@ object Worker {
           replyTo ! ResourcesInspector.processingCapabilities
           Behaviors.same
 
-        case NewSimulation(replyTo, fieldSize, neighbors) =>
-          val field = Vector.tabulate(fieldSize, fieldSize)((_, _) => false)
+        case NewSimulation(replyTo, fieldSize, lifeFactor, neighbors) =>
+          val (field, duration) = Clock.withMeasuring {
+            ArraySeq.tabulate(fieldSize, fieldSize)((_, _) => Random.between(0f, 1f) <= lifeFactor)
+          }
 
-          context.log.info("Initialized {}x{} empty field", field.length, field.head.length)
+          context.log.info("Initialized {}x{} field in {}s", field.length, field.head.length, duration.toMillis / 1000f)
 
           replyTo ! Done
 
@@ -60,12 +72,12 @@ object Worker {
             context.log.info("Working in the single worker mode")
             singleWorkerSimulationBehaviour(field)
           } else {
-            context.log.debug("Working in the multi worker mode")
-            multiWorkerSimulationBehaviour(neighbors, Vector.empty, (None, None), field)
+            context.log.info("Working in the multi worker mode")
+            multiWorkerSimulationBehaviour(neighbors, ArraySeq.empty, (None, None), field)
           }
 
         case wrong =>
-          context.log.warn("Received massage in wrong behaviour: {}", wrong)
+          context.log.warn("Received {} in initial behaviour: {}", wrong)
           Behaviors.same
       }
     }
@@ -74,7 +86,7 @@ object Worker {
       workerNeighbors: Neighbors,
       field: Field,
       neighborsSides: NeighborsSides = (None, None),
-      nextField: Field = Vector.empty
+      nextField: Field = ArraySeq.empty
   ): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
       Behaviors.receiveMessage {
@@ -130,7 +142,15 @@ object Worker {
         case newSimulation: NewSimulation =>
           context.log.info("Resetting self to initial state and start preparing new simulation")
           context.self ! newSimulation
-          initialLifeCycle()
+          initialBehaviour()
+
+        case Reset =>
+          context.log.info("Received Reset command from master. Resetting to empty state")
+          initialBehaviour()
+
+        case ShowYourField =>
+          context.log.info("Received show command:\n{}", field.beautify)
+          Behaviors.same
 
         case AskingFailure(throwable) =>
           context.log.error("Failure during neighbor communication", throwable)
@@ -154,7 +174,7 @@ object Worker {
       }
     }
 
-  def computeNextIteration(field: Field, leftSide: Vector[Boolean], rightSide: Vector[Boolean]): (Field, WorkerIterationStats) = {
+  def computeNextIteration(field: Field, leftSide: ArraySeq[Boolean], rightSide: ArraySeq[Boolean]): (Field, WorkerIterationStats) = {
     val startedAt = System.nanoTime()
 
     val fieldCopy  = field.map(_.toArray)
@@ -183,13 +203,13 @@ object Worker {
         fieldCopy(r)(c) = false
     }
 
-    val finishedField = fieldCopy.map(_.toVector)
+    val finishedField = fieldCopy.map(_.to(ArraySeq))
     val duration      = FiniteDuration(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS)
 
     finishedField -> WorkerIterationStats(duration, population)
   }
 
-  private def computeCell(field: Field, r: Int, c: Int, neighborSide: Vector[Boolean] = Vector.empty): Boolean =
+  private def computeCell(field: Field, r: Int, c: Int, neighborSide: ArraySeq[Boolean] = ArraySeq.empty): Boolean =
     (field.isDefinedAt(r), field.head.isDefinedAt(c)) match {
       case (true, true)   => field(r)(c)
       case (true, false)  => neighborSide(r)

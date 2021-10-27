@@ -5,7 +5,8 @@ import org.scalatest.wordspec.AnyWordSpecLike
 import vbosiak.common.utils.FieldFormatter._
 import vbosiak.worker.actors.Worker.Field
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{ArraySeq, SortedMap}
+import scala.reflect.ClassTag
 
 final class WorkerSpec extends AnyWordSpecLike with Matchers {
   private def withDetails[T](initial: Field, computed: Field, expected: Field, prefix: String = "")(fun: => T): T =
@@ -45,132 +46,132 @@ final class WorkerSpec extends AnyWordSpecLike with Matchers {
 }
 
 object TestCases {
-  final case class NextIterationCase(initial: Field, expected: Field, left: Vector[Boolean], right: Vector[Boolean])
-  final case class Next5IterationsStandAloneCase(next5: List[(Field, Vector[Boolean], Vector[Boolean])])
+  final case class NextIterationCase(initial: Field, expected: Field, left: ArraySeq[Boolean], right: ArraySeq[Boolean])
+  final case class Next5IterationsStandAloneCase(next5: List[(Field, ArraySeq[Boolean], ArraySeq[Boolean])])
 
   private val - = false
   private val o = true
 
-  private def V[T](elems: T*) = Vector[T](elems: _*)
+  private def A[T: ClassTag](elems: T*) = ArraySeq[T](elems: _*)
 
   val nextIterationCases: SortedMap[String, NextIterationCase] = SortedMap(
     "5x5, blinker test"                                -> {
-      val initial = V(
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, o, o, o, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -)
+      val initial = A(
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, o, o, o, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -)
       )
-      val next    = V(
-        V(-, -, -, -, -),
-        V(-, -, o, -, -),
-        V(-, -, o, -, -),
-        V(-, -, o, -, -),
-        V(-, -, -, -, -)
+      val next    = A(
+        A(-, -, -, -, -),
+        A(-, -, o, -, -),
+        A(-, -, o, -, -),
+        A(-, -, o, -, -),
+        A(-, -, -, -, -)
       )
-      val left    = V(-, -, -, -, -)
-      val right   = V(-, -, -, -, -)
+      val left    = A(-, -, -, -, -)
+      val right   = A(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
     "5x5, block, horizontal closure test"              -> {
-      val initial = V(
-        V(-, -, o, o, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, o, o, -)
+      val initial = A(
+        A(-, -, o, o, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, o, o, -)
       )
-      val next    = V(
-        V(-, -, o, o, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, o, o, -)
+      val next    = A(
+        A(-, -, o, o, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, o, o, -)
       )
-      val left    = V(-, -, -, -, -)
-      val right   = V(-, -, -, -, -)
+      val left    = A(-, -, -, -, -)
+      val right   = A(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
     "5x5, blocks, vertical closure test"               -> {
-      val initial = V(
-        V(-, -, -, -, -),
-        V(o, -, -, -, o),
-        V(o, -, -, -, o),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -)
+      val initial = A(
+        A(-, -, -, -, -),
+        A(o, -, -, -, o),
+        A(o, -, -, -, o),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -)
       )
-      val next    = V(
-        V(-, -, -, -, -),
-        V(o, -, -, -, o),
-        V(o, -, -, -, o),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -)
+      val next    = A(
+        A(-, -, -, -, -),
+        A(o, -, -, -, o),
+        A(o, -, -, -, o),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -)
       )
-      val left    = V(-, o, o, -, -)
-      val right   = V(-, o, o, -, -)
+      val left    = A(-, o, o, -, -)
+      val right   = A(-, o, o, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
     "5x5, blinker, vertical & horizontal closure test" -> {
-      val initial = V(
-        V(o, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(o, -, -, -, -),
-        V(o, -, -, -, -)
+      val initial = A(
+        A(o, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(o, -, -, -, -),
+        A(o, -, -, -, -)
       )
-      val next    = V(
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(o, o, -, -, -)
+      val next    = A(
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(o, o, -, -, -)
       )
-      val left    = V(-, -, -, -, -)
-      val right   = V(-, -, -, -, -)
+      val left    = A(-, -, -, -, -)
+      val right   = A(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
     "5x5, glider test"                                 -> {
-      val initial = V(
-        V(-, -, -, -, -),
-        V(-, -, o, -, -),
-        V(-, -, -, o, -),
-        V(-, o, o, o, -),
-        V(-, -, -, -, -)
+      val initial = A(
+        A(-, -, -, -, -),
+        A(-, -, o, -, -),
+        A(-, -, -, o, -),
+        A(-, o, o, o, -),
+        A(-, -, -, -, -)
       )
-      val next    = V(
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, o, -, o, -),
-        V(-, -, o, o, -),
-        V(-, -, o, -, -)
+      val next    = A(
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, o, -, o, -),
+        A(-, -, o, o, -),
+        A(-, -, o, -, -)
       )
-      val left    = V(-, -, -, -, -)
-      val right   = V(-, -, -, -, -)
+      val left    = A(-, -, -, -, -)
+      val right   = A(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
     "5x5, block, vertical & horizontal closure test"   -> {
-      val initial = V(
-        V(o, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(o, -, -, -, -)
+      val initial = A(
+        A(o, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(o, -, -, -, -)
       )
-      val next    = V(
-        V(o, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(-, -, -, -, -),
-        V(o, -, -, -, -)
+      val next    = A(
+        A(o, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(-, -, -, -, -),
+        A(o, -, -, -, -)
       )
-      val left    = V(o, -, -, -, o)
-      val right   = V(-, -, -, -, -)
+      val left    = A(o, -, -, -, o)
+      val right   = A(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     }
@@ -178,77 +179,77 @@ object TestCases {
 
   val next5IterationsStandAloneCases: SortedMap[String, Next5IterationsStandAloneCase] = SortedMap(
     "5x5, glider test"                                               -> {
-      val iterations: List[(Field, Vector[Boolean], Vector[Boolean])] = List(
+      val iterations = List(
         standLoneField(
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(-, -, -, o, -),
-          V(-, -, -, -, o),
-          V(-, -, o, o, o)
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(-, -, -, o, -),
+          A(-, -, -, -, o),
+          A(-, -, o, o, o)
         ),
         standLoneField(
-          V(-, -, -, o, -),
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(-, -, o, -, o),
-          V(-, -, -, o, o)
+          A(-, -, -, o, -),
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(-, -, o, -, o),
+          A(-, -, -, o, o)
         ),
         standLoneField(
-          V(-, -, -, o, o),
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(-, -, -, -, o),
-          V(-, -, o, -, o)
+          A(-, -, -, o, o),
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(-, -, -, -, o),
+          A(-, -, o, -, o)
         ),
         standLoneField(
-          V(-, -, -, o, o),
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(-, -, -, o, -),
-          V(o, -, -, -, o)
+          A(-, -, -, o, o),
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(-, -, -, o, -),
+          A(o, -, -, -, o)
         ),
         standLoneField(
-          V(o, -, -, o, o),
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(-, -, -, -, o),
-          V(o, -, -, -, -)
+          A(o, -, -, o, o),
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(-, -, -, -, o),
+          A(o, -, -, -, -)
         ),
         standLoneField(
-          V(o, -, -, -, o),
-          V(-, -, -, -, o),
-          V(-, -, -, -, -),
-          V(-, -, -, -, -),
-          V(o, -, -, o, -)
+          A(o, -, -, -, o),
+          A(-, -, -, -, o),
+          A(-, -, -, -, -),
+          A(-, -, -, -, -),
+          A(o, -, -, o, -)
         )
       )
       Next5IterationsStandAloneCase(iterations)
     },
     "10x10, variable structures, vertical & horizontal closure test" -> {
-      val firstTwo: List[(Field, Vector[Boolean], Vector[Boolean])] = List(
+      val firstTwo = List(
         standLoneField(
-          V(o, -, -, -, -, o, -, -, -, o),
-          V(-, -, -, -, -, o, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(o, -, -, -, -, -, -, -, -, o),
-          V(o, -, -, o, o, o, -, -, -, o),
-          V(-, -, -, -, o, o, o, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(o, -, -, -, -, o, -, -, -, o)
+          A(o, -, -, -, -, o, -, -, -, o),
+          A(-, -, -, -, -, o, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(o, -, -, -, -, -, -, -, -, o),
+          A(o, -, -, o, o, o, -, -, -, o),
+          A(-, -, -, -, o, o, o, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(o, -, -, -, -, o, -, -, -, o)
         ),
         standLoneField(
-          V(o, -, -, -, o, o, o, -, -, o),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(o, -, -, -, o, -, -, -, -, o),
-          V(o, -, -, o, -, -, o, -, -, o),
-          V(-, -, -, o, -, -, o, -, -, -),
-          V(-, -, -, -, -, o, -, -, -, -),
-          V(-, -, -, -, -, -, -, -, -, -),
-          V(o, -, -, -, -, -, -, -, -, o)
+          A(o, -, -, -, o, o, o, -, -, o),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(o, -, -, -, o, -, -, -, -, o),
+          A(o, -, -, o, -, -, o, -, -, o),
+          A(-, -, -, o, -, -, o, -, -, -),
+          A(-, -, -, -, -, o, -, -, -, -),
+          A(-, -, -, -, -, -, -, -, -, -),
+          A(o, -, -, -, -, -, -, -, -, o)
         )
       )
 
@@ -258,8 +259,8 @@ object TestCases {
     }
   )
 
-  private def standLoneField(fieldRows: Vector[Boolean]*): (Field, Vector[Boolean], Vector[Boolean]) = {
-    val matrix = V(fieldRows: _*)
+  private def standLoneField(fieldRows: ArraySeq[Boolean]*): (Field, ArraySeq[Boolean], ArraySeq[Boolean]) = {
+    val matrix = A(fieldRows: _*)
 
     (matrix, matrix.map(_.last), matrix.map(_.head))
   }

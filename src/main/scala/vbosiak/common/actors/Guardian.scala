@@ -6,7 +6,7 @@ import akka.cluster.typed.Cluster
 import akka.http.scaladsl.Http
 import akka.management.scaladsl.AkkaManagement
 import vbosiak.common.utils.ResourcesInspector
-import vbosiak.master.actors.{Coordinator, Master}
+import vbosiak.master.actors.Master
 import vbosiak.master.controllers.MasterController
 import vbosiak.worker.actors.Worker
 
@@ -22,7 +22,6 @@ object Guardian {
         val managementRoutes = AkkaManagement(context.system).routes
 
         val masterRef = context.spawn(Master(cluster), "master")
-        context.spawn(Coordinator(cluster, masterRef), "coordinator")
 
         implicit val system: ActorSystem[Nothing] = context.system
         val masterController                      = new MasterController(masterRef)

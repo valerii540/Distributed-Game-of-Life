@@ -14,7 +14,6 @@ import scala.concurrent.duration.DurationInt
 
 final class MasterController(master: ActorRef[MasterCommand])(implicit system: ActorSystem[Nothing]) extends PlayJsonSupport {
   import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
-  implicit val timeout: Timeout = 10.seconds
 
   def routes(managementRoutes: Route): Route =
     path("simulation" / "init") {
@@ -22,33 +21,41 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
         entity(as[UserParameters]) { params =>
           if (params.mode == Mode.SoftTimed && params.delay.isEmpty)
             complete(StatusCodes.BadRequest, "Missing the 'delay' parameter for soft-timed mode")
-          else
+          else {
+            implicit val timeout: Timeout = 30.seconds
             onSuccess(master.ask(Master.PrepareSimulation(_, params))) {
               case Master.OK                 => complete(StatusCodes.OK)
-              case Master.AlreadyRunning     => complete(StatusCodes.BadRequest, "Cluster already running simulation")
+              case Master.AlreadyRunning     => complete(StatusCodes.BadRequest, "Cluster already running a simulation")
               case Master.NoWorkersInCluster => complete(StatusCodes.Conflict, "No workers connected to cluster")
             }
+          }
         }
       }
-    } ~ {
+    } ~
       path("simulation" / "next") {
         patch {
+          implicit val timeout: Timeout = 2.minutes
           onSuccess(master.ask(Master.ManualTrigger)) {
             case Master.OK             => complete(StatusCodes.OK)
             case Master.AlreadyRunning => complete(StatusCodes.BadRequest, "The previous iteration is not completed yet")
             case _                     => complete(StatusCodes.InternalServerError)
           }
         }
-      }
-    } ~ {
-      path("cluster" / "stats") {
+      } ~
+      path("simulation" / "workers" / "show") {
         get {
+          master ! Master.ShowWorkersFields
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("cluster" / "status") {
+        get {
+          implicit val timeout: Timeout = 5.seconds
           onSuccess(master.ask(Master.TellClusterStatus)) {
             complete(_)
           }
         }
-      }
-    } ~
+      }  ~
       managementRoutes
 
 }

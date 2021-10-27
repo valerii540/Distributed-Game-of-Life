@@ -3,13 +3,16 @@ package vbosiak.master.controllers.models
 import akka.actor.typed.ActorRef
 import play.api.libs.json.{JsString, Json, Writes}
 import vbosiak.common.models.Capabilities
+import vbosiak.master.models.Mode
 import vbosiak.worker.actors.Worker.WorkerCommand
 
 import java.util.UUID
 
 private[master] final case class ClusterStatusResponse(
     status: ClusterStatus,
-    description: String,
+    mode: Option[Mode] = None,
+    delay: Option[Int] = None,
+    iteration: Option[Long] = None,
     workers: Option[List[WorkerResponse]] = None,
     workersRaw: Option[List[ActorRef[WorkerCommand]]] = None
 )

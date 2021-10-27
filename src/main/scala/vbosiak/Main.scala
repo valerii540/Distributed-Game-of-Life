@@ -1,6 +1,7 @@
 package vbosiak
 
 import akka.actor.typed.ActorSystem
+import akka.cluster.typed.{Cluster, Leave}
 import vbosiak.common.actors.Guardian
 import vbosiak.common.utils.ConfigProvider
 
@@ -12,5 +13,7 @@ object Main extends App {
 
   //TODO: remove this development trick later
   StdIn.readLine()
-  system.terminate()
+
+  val cluster = Cluster(system)
+  cluster.manager ! Leave(cluster.selfMember.address)
 }
