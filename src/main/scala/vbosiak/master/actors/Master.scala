@@ -130,6 +130,12 @@ final class Master(context: ActorContext[MasterCommand]) {
       WorkerRep(UUID.randomUUID(), w, Neighbors(leftNeighbor, rightNeighbor), workers(w))
     }
 
+    (params.preferredFieldSize, params.forceDistribution) match {
+      case (Some(size), Some(true)) => ???
+      case (Some(size), _)          => ???
+      case (None, _)                => ???
+    }
+
     val weakestWorker = workersRep.minBy(_.capabilities.maxFiledSideSize)
     context.log.info(
       "Collected all info about workers. Weakest worker can handle only {}x{} field ({}GB)",
@@ -146,13 +152,13 @@ final class Master(context: ActorContext[MasterCommand]) {
         case Failure(exception) => throw exception
       }
 
-    params match {
-      case UserParameters(Mode.Fastest, _, _)       =>
-        fastestModeBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize)
-      case UserParameters(Mode.Manual, _, _)        =>
+    params.mode match {
+      case Mode.Manual    =>
         manualModeBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize, busy = false)
-      case UserParameters(Mode.SoftTimed, delay, _) =>
-        softTimedBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize, Duration(delay.get, TimeUnit.SECONDS))
+      case Mode.Fastest   =>
+        fastestModeBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize)
+      case Mode.SoftTimed =>
+        softTimedBehaviour(workersRep.toList, State(0), weakestWorker.capabilities.maxFiledSideSize, Duration(params.delay.get, TimeUnit.SECONDS))
     }
   }
 
