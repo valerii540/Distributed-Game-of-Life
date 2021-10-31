@@ -1,11 +1,11 @@
 package vbosiak.common.actors
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorSystem, Behavior, PostStop}
+import akka.actor.typed.{ActorSystem, Behavior, PostStop, Terminated}
 import akka.cluster.typed.Cluster
 import akka.http.scaladsl.Http
 import akka.management.scaladsl.AkkaManagement
-import vbosiak.common.utils.ResourcesInspector
+import vbosiak.common.utils.{ConfigProvider, ResourcesInspector}
 import vbosiak.master.actors.Master
 import vbosiak.master.controllers.MasterController
 import vbosiak.worker.actors.Worker
@@ -35,8 +35,8 @@ object Guardian {
       } else {
         ResourcesInspector.inspectNode()
 
-        context.spawn(Worker(cluster), "worker")
-        Behaviors.empty
+        context.spawn(Worker(), ConfigProvider.config.getString("simulation.worker.unique-id"))
+        Behaviors.same
       }
     }
 }

@@ -5,6 +5,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
+import com.typesafe.scalalogging.LazyLogging
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import vbosiak.master.actors.Master
 import vbosiak.master.actors.Master.MasterCommand
@@ -12,7 +13,7 @@ import vbosiak.master.models.{Mode, UserParameters}
 
 import scala.concurrent.duration.DurationInt
 
-final class MasterController(master: ActorRef[MasterCommand])(implicit system: ActorSystem[Nothing]) extends PlayJsonSupport {
+final class MasterController(master: ActorRef[MasterCommand])(implicit system: ActorSystem[Nothing]) extends PlayJsonSupport with LazyLogging {
   import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 
   def routes(managementRoutes: Route): Route =
@@ -34,7 +35,7 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
     } ~
       path("simulation" / "next") {
         patch {
-          implicit val timeout: Timeout = 2.minutes
+          implicit val timeout: Timeout = 5.seconds
           onSuccess(master.ask(Master.ManualTrigger)) {
             case Master.OK             => complete(StatusCodes.OK)
             case Master.AlreadyRunning => complete(StatusCodes.BadRequest, "The previous iteration is not completed yet")
@@ -48,14 +49,18 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
           complete(StatusCodes.OK)
         }
       } ~
+      path("simulation" / "reset") {
+        get {
+          master ! Master.ShowWorkersFields
+          complete(StatusCodes.OK)
+        }
+      } ~
       path("cluster" / "status") {
         get {
           implicit val timeout: Timeout = 5.seconds
-          onSuccess(master.ask(Master.TellClusterStatus)) {
-            complete(_)
-          }
+          onSuccess(master.ask(Master.TellClusterStatus))(complete(_))
         }
-      }  ~
+      } ~
       managementRoutes
 
 }

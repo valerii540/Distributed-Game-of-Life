@@ -9,4 +9,6 @@ object Clock {
     val result = f
     result -> FiniteDuration(System.nanoTime() - tick, TimeUnit.NANOSECONDS)
   }
+
+  def fromNano(duration: Long): FiniteDuration = FiniteDuration(duration, TimeUnit.NANOSECONDS)
 }

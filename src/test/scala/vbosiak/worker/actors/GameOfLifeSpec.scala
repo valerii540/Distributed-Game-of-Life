@@ -1,14 +1,21 @@
 package vbosiak.worker.actors
 
+import akka.actor.typed.scaladsl.ActorContext
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import vbosiak.common.utils.FieldFormatter._
-import vbosiak.worker.actors.Worker.Field
+import vbosiak.worker.actors.Worker.{Field, WorkerCommand}
+import vbosiak.worker.helpers.WorkerHelper
 
 import scala.collection.immutable.{ArraySeq, SortedMap}
 import scala.reflect.ClassTag
 
-final class WorkerSpec extends AnyWordSpecLike with Matchers {
+final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
+  private val workerHelper = new WorkerHelper {
+    // game of life computing does not require actor context
+    override implicit val context: ActorContext[WorkerCommand] = null
+  }
+
   private def withDetails[T](initial: Field, computed: Field, expected: Field, prefix: String = "")(fun: => T): T =
     withClue(s"$prefix Initial:\n${initial.beautify}\nExpected:\n${expected.beautify}\nComputed:\n${computed.beautify}")(fun)
 
@@ -18,7 +25,7 @@ final class WorkerSpec extends AnyWordSpecLike with Matchers {
         TestCases.nextIterationCases.foreach { case (name, tCase) =>
           info(name)
 
-          val computed = Worker.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+          val computed = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
           withDetails(tCase.initial, computed, tCase.expected) {
             computed mustEqual tCase.expected
@@ -33,10 +40,10 @@ final class WorkerSpec extends AnyWordSpecLike with Matchers {
           info(name)
 
           (0 until 5).foreach { i =>
-            val computed = Worker.computeNextIteration(tCase.next5(i)._1, tCase.next5(i)._2, tCase.next5(i)._3)._1
+            val computed = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
 
-            withDetails(tCase.next5(i)._1, computed, tCase.next5(i + 1)._1, s"[$i]") {
-              computed mustEqual tCase.next5(i + 1)._1
+            withDetails(tCase.next5(i), computed, tCase.next5(i + 1), s"[$i]") {
+              computed mustEqual tCase.next5(i + 1)
             }
           }
         }
@@ -47,7 +54,7 @@ final class WorkerSpec extends AnyWordSpecLike with Matchers {
 
 object TestCases {
   final case class NextIterationCase(initial: Field, expected: Field, left: ArraySeq[Boolean], right: ArraySeq[Boolean])
-  final case class Next5IterationsStandAloneCase(next5: List[(Field, ArraySeq[Boolean], ArraySeq[Boolean])])
+  final case class Next5IterationsStandAloneCase(next5: List[Field])
 
   private val - = false
   private val o = true
@@ -180,42 +187,42 @@ object TestCases {
   val next5IterationsStandAloneCases: SortedMap[String, Next5IterationsStandAloneCase] = SortedMap(
     "5x5, glider test"                                               -> {
       val iterations = List(
-        standLoneField(
+        A(
           A(-, -, -, -, -),
           A(-, -, -, -, -),
           A(-, -, -, o, -),
           A(-, -, -, -, o),
           A(-, -, o, o, o)
         ),
-        standLoneField(
+        A(
           A(-, -, -, o, -),
           A(-, -, -, -, -),
           A(-, -, -, -, -),
           A(-, -, o, -, o),
           A(-, -, -, o, o)
         ),
-        standLoneField(
+        A(
           A(-, -, -, o, o),
           A(-, -, -, -, -),
           A(-, -, -, -, -),
           A(-, -, -, -, o),
           A(-, -, o, -, o)
         ),
-        standLoneField(
+        A(
           A(-, -, -, o, o),
           A(-, -, -, -, -),
           A(-, -, -, -, -),
           A(-, -, -, o, -),
           A(o, -, -, -, o)
         ),
-        standLoneField(
+        A(
           A(o, -, -, o, o),
           A(-, -, -, -, -),
           A(-, -, -, -, -),
           A(-, -, -, -, o),
           A(o, -, -, -, -)
         ),
-        standLoneField(
+        A(
           A(o, -, -, -, o),
           A(-, -, -, -, o),
           A(-, -, -, -, -),
@@ -227,7 +234,7 @@ object TestCases {
     },
     "10x10, variable structures, vertical & horizontal closure test" -> {
       val firstTwo = List(
-        standLoneField(
+        A(
           A(o, -, -, -, -, o, -, -, -, o),
           A(-, -, -, -, -, o, -, -, -, -),
           A(-, -, -, -, -, -, -, -, -, -),
@@ -239,7 +246,7 @@ object TestCases {
           A(-, -, -, -, -, -, -, -, -, -),
           A(o, -, -, -, -, o, -, -, -, o)
         ),
-        standLoneField(
+        A(
           A(o, -, -, -, o, o, o, -, -, o),
           A(-, -, -, -, -, -, -, -, -, -),
           A(-, -, -, -, -, -, -, -, -, -),
@@ -258,10 +265,4 @@ object TestCases {
       Next5IterationsStandAloneCase(iterations)
     }
   )
-
-  private def standLoneField(fieldRows: ArraySeq[Boolean]*): (Field, ArraySeq[Boolean], ArraySeq[Boolean]) = {
-    val matrix = A(fieldRows: _*)
-
-    (matrix, matrix.map(_.last), matrix.map(_.head))
-  }
 }
