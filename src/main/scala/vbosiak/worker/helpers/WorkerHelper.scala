@@ -36,8 +36,8 @@ private[worker] trait WorkerHelper {
 
   def computeNextIteration(
       field: Field,
-      leftSide: ArraySeq[Boolean],
-      rightSide: ArraySeq[Boolean],
+      leftSide: Side,
+      rightSide: Side,
       standAlone: Boolean = false
   ): (Field, Int) = {
     val fieldCopy  = field.map(_.toArray)
@@ -47,14 +47,14 @@ private[worker] trait WorkerHelper {
       val isAlive = field(r)(c)
 
       val aliveNeighbors: Int = Seq(
-        computeCell(field, r - 1, c, ArraySeq.empty, standAlone), // top
-        computeCell(field, r + 1, c, ArraySeq.empty, standAlone), // bottom
-        computeCell(field, r, c + 1, rightSide, standAlone),      // right
-        computeCell(field, r, c - 1, leftSide, standAlone),       // left
-        computeCell(field, r - 1, c + 1, rightSide, standAlone),  // top-right
-        computeCell(field, r - 1, c - 1, leftSide, standAlone),   // top-left
-        computeCell(field, r + 1, c + 1, rightSide, standAlone),  // bottom-right
-        computeCell(field, r + 1, c - 1, leftSide, standAlone)    // bottom-left
+        computeCell(field, r - 1, c, standAlone),                // top
+        computeCell(field, r + 1, c, standAlone),                // bottom
+        computeCell(field, r, c + 1, standAlone, rightSide),     // right
+        computeCell(field, r, c - 1, standAlone, leftSide),      // left
+        computeCell(field, r - 1, c + 1, standAlone, rightSide), // top-right
+        computeCell(field, r - 1, c - 1, standAlone, leftSide),  // top-left
+        computeCell(field, r + 1, c + 1, standAlone, rightSide), // bottom-right
+        computeCell(field, r + 1, c - 1, standAlone, leftSide)   // bottom-left
       ).count(identity)
 
       if (isAlive && (aliveNeighbors == 2 || aliveNeighbors == 3))
@@ -71,7 +71,7 @@ private[worker] trait WorkerHelper {
     finishedField -> population
   }
 
-  def computeCell(field: Field, r: Int, c: Int, neighborSide: ArraySeq[Boolean] = ArraySeq.empty, standAlone: Boolean = false): Boolean =
+  def computeCell(field: Field, r: Int, c: Int, standAlone: Boolean, neighborSide: Side = Nil): Boolean =
     (field.isDefinedAt(r), field.head.isDefinedAt(c)) match {
       // Cases in both modes
       case (true, true)  => field(r)(c)
@@ -88,4 +88,21 @@ private[worker] trait WorkerHelper {
       case (false, false) if r >= field.size && c < field.head.size  => field.head.last
       case (false, false) if r < field.size && c < field.head.size   => field.last.last
     }
+
+  def generateStableTestSample: Field = {
+    import vbosiak.common.utils.FieldPainter._
+
+    A(
+      A(-, -, o, o, -, -, o, o, -, -),
+      A(-, -, -, -, -, -, -, -, -, -),
+      A(o, -, -, -, -, -, -, -, -, o),
+      A(o, -, -, -, -, -, -, -, -, o),
+      A(-, -, -, -, o, o, -, -, -, -),
+      A(o, -, -, -, o, o, -, -, -, o),
+      A(o, -, -, -, -, -, -, -, -, o),
+      A(-, -, -, -, -, -, -, -, -, -),
+      A(-, -, -, -, -, -, -, -, -, -),
+      A(-, -, o, o, -, -, o, o, -, -)
+    )
+  }
 }

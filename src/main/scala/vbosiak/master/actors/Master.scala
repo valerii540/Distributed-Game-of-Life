@@ -6,10 +6,10 @@ import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.typed._
 import akka.util.Timeout
 import vbosiak.common.models._
-import vbosiak.common.utils.Clock
 import vbosiak.master.actors.Master.MasterCommand
 import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, WorkerResponse}
-import vbosiak.master.models.{Mode, PreferredSize, UserParameters}
+import vbosiak.master.helpers.MasterHelper
+import vbosiak.master.models.{Mode, Size, UserParameters}
 import vbosiak.worker.actors.Worker
 import vbosiak.worker.actors.Worker._
 
@@ -23,9 +23,10 @@ object Master {
 
   /** Responses for MaterController */
   sealed trait ControllerResponse
-  case object OK                 extends ControllerResponse
-  case object AlreadyRunning     extends ControllerResponse
-  case object NoWorkersInCluster extends ControllerResponse
+  case object OK                                       extends ControllerResponse
+  case object AlreadyRunning                           extends ControllerResponse
+  case object NoWorkersInCluster                       extends ControllerResponse
+  final case class ImpossibleToProcess(reason: String) extends ControllerResponse
 
   /** Actor commands */
   sealed trait MasterCommand extends CborSerializable
@@ -34,14 +35,15 @@ object Master {
   final case class TellClusterStatus(replyTo: ActorRef[ClusterStatusResponse])                      extends MasterCommand
   final case class ManualTrigger(replyTo: ActorRef[ControllerResponse])                             extends MasterCommand
   case object ResetSimulation                                                                       extends MasterCommand
+  case object ClusterSelfTest                                                                       extends MasterCommand
 
   case object ShowWorkersFields extends MasterCommand
 
-  private final case class WorkerIsReady(workerRep: WorkerRep)                                          extends MasterCommand
-  private final case class NextIteration()                                                              extends MasterCommand
-  private final case class IterationDone(results: Set[WorkerIterationResult], duration: FiniteDuration) extends MasterCommand
-  private final case class ListingResponse(listing: Receptionist.Listing)                               extends MasterCommand
-  private final case class PreparationDone(population: Long, duration: FiniteDuration)                  extends MasterCommand
+  private[master] final case class WorkerIsReady(workerRep: WorkerRep)                                          extends MasterCommand
+  private[master] final case class NextIteration()                                                              extends MasterCommand
+  private[master] final case class IterationDone(results: Set[WorkerIterationResult], duration: FiniteDuration) extends MasterCommand
+  private[master] final case class ListingResponse(listing: Receptionist.Listing)                               extends MasterCommand
+  private[master] final case class PreparationDone(population: Long, duration: FiniteDuration)                  extends MasterCommand
 
   def apply(cluster: Cluster): Behavior[MasterCommand] =
     Behaviors.setup { context =>
@@ -51,11 +53,11 @@ object Master {
 
       context.system.receptionist ! Receptionist.Subscribe(workerServiceKey, listingResponseAdapter)
 
-      new Master(context).setupLifeCycle(Set.empty)
+      new Master()(context).setupLifeCycle(Set.empty)
     }
 }
 
-final class Master(context: ActorContext[MasterCommand]) {
+final class Master()(override implicit val context: ActorContext[MasterCommand]) extends MasterHelper {
   import Master._
   import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 
@@ -75,8 +77,8 @@ final class Master(context: ActorContext[MasterCommand]) {
             val newConnected = discovered -- knownWorkers
             val duplicates   = newConnected.map(w => w -> w.path.name).filter(p => knownWorkers.map(_.path.name)(p._2))
 
-            duplicates.foreach { case (ref, name) =>
-              ref ! Die(s"Worker with ID $name already in cluster. You should die")
+            duplicates.foreach { case (ref, id) =>
+              ref ! Die(s"Worker with ID $id already in cluster. You should die")
             }
             newConnected -- duplicates.map(_._1)
           }
@@ -115,10 +117,24 @@ final class Master(context: ActorContext[MasterCommand]) {
           if (workers.isEmpty) {
             controller ! NoWorkersInCluster
             Behaviors.same
-          } else {
-            controller ! OK
-            prepareSimulation(workers, params)
-          }
+          } else
+            params.preferredFieldSize match {
+              case Some(size) =>
+                val neededResources    = size.area
+                val availableResources = workers.foldLeft(0L)((a, w) => a + w.capabilities.availableMemory)
+                if (availableResources < neededResources) {
+                  controller ! ImpossibleToProcess(
+                    s"Requested field size too big for current cluster. Requested bytes: $neededResources, available: $availableResources"
+                  )
+                  Behaviors.same
+                } else {
+                  controller ! OK
+                  prepareSimulation(workers, params)
+                }
+              case None       =>
+                controller ! OK
+                prepareSimulation(workers, params)
+            }
 
         case TellClusterStatus(replyTo) =>
           replyTo ! ClusterStatusResponse(
@@ -127,6 +143,20 @@ final class Master(context: ActorContext[MasterCommand]) {
           )
 
           Behaviors.same
+
+        case ClusterSelfTest =>
+          if (workers.size < 2) {
+            context.log.warn("[Self-test] Unable to perform cluster self-test. Self-test requires two or more workers")
+            Behaviors.same
+          } else {
+            val limitedWorkers = workers.map(w => w.copy(capabilities = w.capabilities.copy(availableMemory = 100)))
+
+            val chosenOnes = divideUniverseBetweenWorkers(Size(10, 20), limitedWorkers)
+
+            context.log.info("[Self-test] Chosen two workers for self-test: {}", chosenOnes.map(_._1.actor.path.name))
+            askForSelfTest(chosenOnes)
+            Behaviors.same
+          }
 
         case ShowWorkersFields =>
           context.log.warn("Cluster in Idle mode. Workers are empty")
@@ -140,61 +170,39 @@ final class Master(context: ActorContext[MasterCommand]) {
 
   private[this] def prepareSimulation(workers: Set[WorkerRep], params: UserParameters): Behavior[MasterCommand] = {
     implicit val workerPreparationTimeout: Timeout = 1.minute
-//    val workerVector                               = workers.keys.toVector
 
-//    val workersRep = workerVector.zipWithIndex.map { case (w, i) =>
-//      val leftNeighbor  = if (workerVector.isDefinedAt(i - 1)) workerVector(i - 1) else workerVector.last
-//      val rightNeighbor = if (workerVector.isDefinedAt(i + 1)) workerVector(i + 1) else workerVector.head
-//
-//      WorkerRep(UUID.randomUUID(), w, Neighbors(leftNeighbor, rightNeighbor), workers(w))
-//    }
+    val activeWorkers: Set[WorkerRep] =
+      (params.preferredFieldSize, params.forceDistribution) match {
+        case (Some(size), true)  => ???
+        case (Some(size), false) =>
+          val chosenOnes = findStandAloneCandidate(size, workers)
+            .map(w => Set(w -> size))
+            .getOrElse(divideUniverseBetweenWorkers(size, workers))
 
-    (params.preferredFieldSize, params.forceDistribution) match {
-      case (Some(PreferredSize(height, width)), true)  => ???
-      case (Some(PreferredSize(height, width)), false) =>
-        val needed    = height * width.toLong
-        val chosenOne = workers.find(_.capabilities.availableMemory > needed)
-        if (chosenOne.isDefined) {
-          context.log.info("Found worker capable for stand-alone processing: {}", chosenOne.get.actor.path.name)
+          context.log.info(
+            "{} worker(s) have been chosen to create a new divine {} universe: {}",
+            chosenOnes.size,
+            size.pretty,
+            chosenOnes.map(_._1.actor.path.name).mkString(", ")
+          )
+          context.log.debug("Chosen workers: {}", chosenOnes.map(ws => s"${ws._1.actor.path.name}: ${ws._2.pretty}").mkString(", "))
 
-          val startedAt = System.nanoTime()
-          context.ask(chosenOne.get.actor, Worker.NewSimulation(_, (height, width), params.lifeFactor, None)) {
-            case Success(population) => PreparationDone(population, Clock.fromNano(System.nanoTime() - startedAt))
-            case Failure(exception)  =>
-              context.log.error("Simulation start failure:", exception)
-              throw exception
-          }
+          askForNewSimulation(chosenOnes, params)
+          chosenOnes.map(_._1)
 
-          params.mode match {
-            case Mode.Manual    =>
-              manualModeBehaviour(Set(chosenOne.get), workers - chosenOne.get, State(0), busy = false)
-            case Mode.Fastest   =>
-              fastestModeBehaviour(Set(chosenOne.get), workers - chosenOne.get, State(0))
-            case Mode.SoftTimed =>
-              softTimedBehaviour(Set(chosenOne.get), workers - chosenOne.get, State(0), FiniteDuration(params.delay.get, TimeUnit.SECONDS))
-          }
-        } else
-          ???
+        case (None, true)  => ???
+        case (None, false) => ???
+      }
 
-      case (None, true)  => ???
-      case (None, false) => ???
+    params.mode match {
+      case Mode.Manual    =>
+        manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0), busy = false)
+      case Mode.Fastest   =>
+        fastestModeBehaviour(activeWorkers, workers -- activeWorkers, State(0))
+      case Mode.SoftTimed =>
+        context.log.error("Soft-timed mode not implemented yet")
+        Behaviors.same
     }
-
-//    val weakestWorker = workersRep.minBy(_.capabilities.maxFiledSideSize)
-//    context.log.info(
-//      "Collected all info about workers. Weakest worker can handle only {}x{} field ({}GB)",
-//      weakestWorker.capabilities.maxFiledSideSize,
-//      weakestWorker.capabilities.maxFiledSideSize,
-//      weakestWorker.capabilities.availableMemory / (1024 * 1024 * 1024)
-//    )
-//
-//    Future
-//      .traverse(workersRep) { worker =>
-//        worker.actor.ask(Worker.NewSimulation(_, weakestWorker.capabilities.maxFiledSideSize, params.lifeFactor, worker.neighbors))
-//      }.onComplete {
-//        case Success(_)         => context.self ! PreparationDone
-//        case Failure(exception) => throw exception
-//      }
   }
 
   private[this] def fastestModeBehaviour(active: Set[WorkerRep], inactive: Set[WorkerRep], state: State): Behavior[MasterCommand] =
@@ -239,6 +247,7 @@ final class Master(context: ActorContext[MasterCommand]) {
         Behaviors.same
 
       case ResetSimulation =>
+        context.log.info("Received Reset command. Resetting cluster...")
         (active ++ inactive).foreach(_.actor ! Reset)
         setupLifeCycle(active ++ inactive)
 
@@ -299,6 +308,7 @@ final class Master(context: ActorContext[MasterCommand]) {
         Behaviors.same
 
       case ResetSimulation =>
+        context.log.info("Received Reset command. Resetting cluster...")
         (active ++ inactive).foreach(_.actor ! Reset)
         setupLifeCycle(active ++ inactive)
 
@@ -310,13 +320,6 @@ final class Master(context: ActorContext[MasterCommand]) {
         context.log.error("Received {} is manualMode behaviour", wrong)
         Behaviors.same
     }
-
-  private[this] def softTimedBehaviour(
-      active: Set[WorkerRep],
-      inactive: Set[WorkerRep],
-      state: State,
-      delay: FiniteDuration
-  ): Behavior[MasterCommand] = ???
 
   private[this] def handleClusterChanges(
       active: Set[WorkerRep],
@@ -356,7 +359,7 @@ final class Master(context: ActorContext[MasterCommand]) {
       mode match {
         case Mode.Manual    => manualModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state, busy.get)
         case Mode.Fastest   => fastestModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state)
-        case Mode.SoftTimed => softTimedBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state, delay.get)
+        case Mode.SoftTimed => Behaviors.same
       }
     } else {
       context.log.warn(

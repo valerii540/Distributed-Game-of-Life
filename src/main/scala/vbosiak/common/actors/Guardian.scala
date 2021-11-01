@@ -1,7 +1,7 @@
 package vbosiak.common.actors
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorSystem, Behavior, PostStop, Terminated}
+import akka.actor.typed.{ActorSystem, Behavior, PostStop}
 import akka.cluster.typed.Cluster
 import akka.http.scaladsl.Http
 import akka.management.scaladsl.AkkaManagement

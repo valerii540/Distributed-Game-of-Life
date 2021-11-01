@@ -25,9 +25,10 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
           else {
             implicit val timeout: Timeout = 30.seconds
             onSuccess(master.ask(Master.PrepareSimulation(_, params))) {
-              case Master.OK                 => complete(StatusCodes.OK)
-              case Master.AlreadyRunning     => complete(StatusCodes.BadRequest, "Cluster already running a simulation")
-              case Master.NoWorkersInCluster => complete(StatusCodes.Conflict, "No workers connected to cluster")
+              case Master.OK                          => complete(StatusCodes.OK)
+              case Master.AlreadyRunning              => complete(StatusCodes.BadRequest, "Cluster already running a simulation")
+              case Master.ImpossibleToProcess(reason) => complete(StatusCodes.BadRequest, reason)
+              case Master.NoWorkersInCluster          => complete(StatusCodes.Conflict, "No workers connected to cluster")
             }
           }
         }
@@ -50,8 +51,14 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
         }
       } ~
       path("simulation" / "reset") {
+        patch {
+          master ! Master.ResetSimulation
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("simulation" / "self-test") {
         get {
-          master ! Master.ShowWorkersFields
+          master ! Master.ClusterSelfTest
           complete(StatusCodes.OK)
         }
       } ~

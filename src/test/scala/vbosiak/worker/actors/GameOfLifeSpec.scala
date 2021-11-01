@@ -4,7 +4,7 @@ import akka.actor.typed.scaladsl.ActorContext
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import vbosiak.common.utils.FieldFormatter._
-import vbosiak.worker.actors.Worker.{Field, WorkerCommand}
+import vbosiak.worker.actors.Worker.{Field, Side, WorkerCommand}
 import vbosiak.worker.helpers.WorkerHelper
 
 import scala.collection.immutable.{ArraySeq, SortedMap}
@@ -40,7 +40,7 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
           info(name)
 
           (0 until 5).foreach { i =>
-            val computed = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
+            val computed = workerHelper.computeNextIteration(tCase.next5(i), Nil, Nil, standAlone = true)._1
 
             withDetails(tCase.next5(i), computed, tCase.next5(i + 1), s"[$i]") {
               computed mustEqual tCase.next5(i + 1)
@@ -53,13 +53,14 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
 }
 
 object TestCases {
-  final case class NextIterationCase(initial: Field, expected: Field, left: ArraySeq[Boolean], right: ArraySeq[Boolean])
+  final case class NextIterationCase(initial: Field, expected: Field, left: Side, right: Side)
   final case class Next5IterationsStandAloneCase(next5: List[Field])
 
   private val - = false
   private val o = true
 
   private def A[T: ClassTag](elems: T*) = ArraySeq[T](elems: _*)
+  private def S[T: ClassTag](elems: T*) = List[T](elems: _*)
 
   val nextIterationCases: SortedMap[String, NextIterationCase] = SortedMap(
     "5x5, blinker test"                                -> {
@@ -77,8 +78,8 @@ object TestCases {
         A(-, -, o, -, -),
         A(-, -, -, -, -)
       )
-      val left    = A(-, -, -, -, -)
-      val right   = A(-, -, -, -, -)
+      val left    = S(-, -, -, -, -)
+      val right   = S(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
@@ -97,8 +98,8 @@ object TestCases {
         A(-, -, -, -, -),
         A(-, -, o, o, -)
       )
-      val left    = A(-, -, -, -, -)
-      val right   = A(-, -, -, -, -)
+      val left    = S(-, -, -, -, -)
+      val right   = S(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
@@ -117,8 +118,8 @@ object TestCases {
         A(-, -, -, -, -),
         A(-, -, -, -, -)
       )
-      val left    = A(-, o, o, -, -)
-      val right   = A(-, o, o, -, -)
+      val left    = S(-, o, o, -, -)
+      val right   = S(-, o, o, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
@@ -137,8 +138,8 @@ object TestCases {
         A(-, -, -, -, -),
         A(o, o, -, -, -)
       )
-      val left    = A(-, -, -, -, -)
-      val right   = A(-, -, -, -, -)
+      val left    = S(-, -, -, -, -)
+      val right   = S(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
@@ -157,8 +158,8 @@ object TestCases {
         A(-, -, o, o, -),
         A(-, -, o, -, -)
       )
-      val left    = A(-, -, -, -, -)
-      val right   = A(-, -, -, -, -)
+      val left    = S(-, -, -, -, -)
+      val right   = S(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     },
@@ -177,8 +178,8 @@ object TestCases {
         A(-, -, -, -, -),
         A(o, -, -, -, -)
       )
-      val left    = A(o, -, -, -, o)
-      val right   = A(-, -, -, -, -)
+      val left    = S(o, -, -, -, o)
+      val right   = S(-, -, -, -, -)
 
       NextIterationCase(initial, next, left, right)
     }

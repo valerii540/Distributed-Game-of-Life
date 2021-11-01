@@ -6,4 +6,9 @@ export ARTERY_PORT=$1
 export MAX_MEMORY=$2
 export UNIQUE_ID=$3
 
-sbt run
+if [ -n "$4" ] && [ -n "$5" ]; then
+  export OVERRIDE_HEIGHT=$4
+  export OVERRIDE_WIDTH=$5
+fi
+
+sbt
