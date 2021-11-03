@@ -309,8 +309,9 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
 
       case ResetSimulation =>
         context.log.info("Received Reset command. Resetting cluster...")
-        (active ++ inactive).foreach(_.actor ! Reset)
-        setupLifeCycle(active ++ inactive)
+        val all = (active ++ inactive).map(_.copy(neighbors = None))
+        all.foreach(_.actor ! Reset)
+        setupLifeCycle(all)
 
       case ShowWorkersFields =>
         active.foreach(_.actor ! ShowYourField)
@@ -375,7 +376,7 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
   }
 
   private[this] def nextIteration(workers: Set[WorkerRep]): Unit = {
-    implicit val timeout: Timeout = 1.minute
+    implicit val timeout: Timeout = 10.minute
     val startedAt                 = System.nanoTime()
     Future
       .traverse(workers)(_.actor.ask(Worker.NextIteration))

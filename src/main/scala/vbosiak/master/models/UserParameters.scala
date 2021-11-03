@@ -17,6 +17,10 @@ final case class Size(height: Int, width: Int) extends CborSerializable {
   def pretty: String = s"${height}x$width"
 }
 
+object Size {
+  def apply(squareSideLength: Int): Size = Size(squareSideLength, squareSideLength)
+}
+
 object UserParameters {
   implicit val preferredSizeFormat: Format[Size] = Json.format[Size]
   implicit val format: Format[UserParameters]    = Json.format[UserParameters]

@@ -24,8 +24,9 @@ object ResourcesInspector extends StrictLogging {
     logger.debug("==> Max memory: {}MB", Runtime.getRuntime.maxMemory() / mb)
     logger.debug("==> Preserved memory: {}MB", preservedBytes / mb)
     logger.debug("==> Max available memory for field: {}MB", processingCapabilities.availableMemory / mb)
+    logger.debug("==> Max square field size: {}", Size(math.sqrt(processingCapabilities.availableMemory.toDouble).toInt).pretty)
     if (sizeOverride.isDefined)
-      logger.warn("==> Field size override enabled: {}x{}", sizeOverride.get.height, sizeOverride.get.width)
+      logger.warn("==> Field size override enabled: {}", sizeOverride.get.pretty)
     logger.debug("=============================")
   }
 
@@ -35,11 +36,7 @@ object ResourcesInspector extends StrictLogging {
     if (maxMemory <= preservedBytes)
       throw new OutOfMemoryError("Max memory is lower than preserved")
 
-    val availableMemory =
-      if (sizeOverride.isDefined)
-        sizeOverride.get.height * sizeOverride.get.width
-      else
-        (maxMemory - preservedBytes) / 2
+    val availableMemory = if (sizeOverride.isDefined) sizeOverride.get.area else (maxMemory - preservedBytes) / 2
 
     Capabilities(availableMemory)
   }
