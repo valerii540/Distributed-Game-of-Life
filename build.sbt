@@ -1,7 +1,7 @@
 name := "distributed-game-of-life"
 
 version      := "0.1.0"
-scalaVersion := "2.13.6"
+scalaVersion := "2.13.7"
 organization := "vbosiak"
 
 run / fork         := true
