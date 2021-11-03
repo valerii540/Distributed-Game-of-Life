@@ -8,6 +8,9 @@ import vbosiak.worker.actors.Worker.{Field, Side, WorkerCommand}
 import vbosiak.worker.helpers.WorkerHelper
 
 import scala.collection.immutable.{ArraySeq, SortedMap}
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.DurationInt
 import scala.reflect.ClassTag
 
 final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
@@ -25,7 +28,7 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
         TestCases.nextIterationCases.foreach { case (name, tCase) =>
           info(name)
 
-          val computed = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+          val computed = Await.result(workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right), 5.seconds)._1
 
           withDetails(tCase.initial, computed, tCase.expected) {
             computed mustEqual tCase.expected
@@ -40,7 +43,7 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
           info(name)
 
           (0 until 5).foreach { i =>
-            val computed = workerHelper.computeNextIteration(tCase.next5(i), Nil, Nil, standAlone = true)._1
+            val computed = Await.result(workerHelper.computeNextIteration(tCase.next5(i), Nil, Nil, standAlone = true), 5.seconds)._1
 
             withDetails(tCase.next5(i), computed, tCase.next5(i + 1), s"[$i]") {
               computed mustEqual tCase.next5(i + 1)

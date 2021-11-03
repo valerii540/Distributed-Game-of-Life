@@ -13,6 +13,7 @@ import vbosiak.worker.helpers.WorkerHelper
 import vbosiak.worker.models.WorkerBehaviour
 
 import scala.collection.immutable.ArraySeq
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Random, Success}
 
@@ -33,16 +34,17 @@ object Worker {
 
   final case class NewSimulation(replyTo: ActorRef[Int], fieldSize: Size, lifeFactor: Float, neighbors: Option[Neighbors], seed: Option[Int])
       extends WorkerCommand
-  final case class NextIteration(replyTo: ActorRef[WorkerIterationResult]) extends WorkerCommand
-  final case class TellFieldLeftSide(replyTo: ActorRef[Side])              extends WorkerCommand
-  final case class TellFieldRightSide(replyTo: ActorRef[Side])             extends WorkerCommand
+  final case class NextIteration(replyTo: ActorRef[WorkerIterationResult], next: Int) extends WorkerCommand
+  final case class TellFieldLeftSide(replyTo: ActorRef[Side])                         extends WorkerCommand
+  final case class TellFieldRightSide(replyTo: ActorRef[Side])                        extends WorkerCommand
 
   case object ShowYourField                                                       extends WorkerCommand
   final case class PrepareSelfTest(replyTo: ActorRef[Done], neighbors: Neighbors) extends WorkerCommand
 
-  private final case class UpdateLeftSide(replyTo: ActorRef[WorkerIterationResult], side: Side, duration: FiniteDuration)  extends WorkerCommand
-  private final case class UpdateRightSide(replyTo: ActorRef[WorkerIterationResult], side: Side, duration: FiniteDuration) extends WorkerCommand
-  private final case class AskingFailure(throwable: Throwable)                                                             extends WorkerCommand
+  private final case class UpdateLeftSide(replyTo: ActorRef[WorkerIterationResult], side: Side, duration: FiniteDuration)     extends WorkerCommand
+  private final case class UpdateRightSide(replyTo: ActorRef[WorkerIterationResult], side: Side, duration: FiniteDuration)    extends WorkerCommand
+  private final case class IterationCompleted(replyTo: ActorRef[WorkerIterationResult], result: (Field, Int, FiniteDuration)) extends WorkerCommand
+  private final case class AskingFailure(throwable: Throwable)                                                                extends WorkerCommand
 
   def apply(): Behavior[WorkerCommand] =
     Behaviors.setup { context =>
@@ -56,6 +58,8 @@ object Worker {
 
 private final class Worker()(override implicit val context: ActorContext[WorkerCommand]) extends WorkerHelper {
   import Worker._
+
+  private[this] implicit val ec: ExecutionContext = context.executionContext
 
   private def initialBehaviour(): Behavior[WorkerCommand] =
     Behaviors.receiveMessage {
@@ -87,13 +91,13 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
           singleWorkerSimulationBehaviour(field)
         } else {
           context.log.info("[Init] Working in the multi worker mode with {}", neighbors.get)
-          multiWorkerSimulationBehaviour(neighbors.get, ArraySeq.empty, (None, None), field)
+          multiWorkerSimulationBehaviour(neighbors.get, ArraySeq.empty, 0, (None, None), field)
         }
 
       case PrepareSelfTest(replyTo, neighbors) =>
         context.log.info("[Self-test] Preparing self-test with neighbors: {}", neighbors)
         replyTo ! Done
-        multiWorkerSimulationBehaviour(neighbors, ArraySeq.empty, (None, None), generateStableTestSample)
+        multiWorkerSimulationBehaviour(neighbors, ArraySeq.empty, 0, (None, None), generateStableTestSample)
 
       case Die(reason) => handleDieCommand(reason)
 
@@ -103,6 +107,7 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
   private[this] def multiWorkerSimulationBehaviour(
       workerNeighbors: Neighbors,
       field: Field,
+      iteration: Int,
       neighborsSides: NeighborsSides = (None, None),
       nextField: Field = ArraySeq.empty
   ): Behavior[WorkerCommand] =
@@ -111,59 +116,53 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
         replyTo ! WorkerBehaviour.Processing(standAlone = false)
         Behaviors.same
 
-      case NextIteration(replyTo) =>
-        context.log.info("[Iteration] Received NextIteration command")
+      case NextIteration(replyTo, next) =>
+        context.log.info("[Iteration #{}] Received NextIteration command", next)
         implicit val timeout: Timeout = 30.seconds
         val statedAt                  = System.nanoTime()
         // Ask left worker about it's right side
         context.ask(workerNeighbors.left, TellFieldRightSide) {
-          case Success(side)      =>
-            context.log.debug("[Iteration] Asking left neighbor about it's right side")
-            UpdateLeftSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
+          case Success(side)      => UpdateLeftSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
           case Failure(exception) => AskingFailure(exception)
         }
 
         // Ask right worker about it's left side
         context.ask(workerNeighbors.right, TellFieldLeftSide) {
-          case Success(side)      =>
-            context.log.debug("[Iteration] Asking right neighbor about it's left side")
-            UpdateRightSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
+          case Success(side)      => UpdateRightSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
           case Failure(exception) => AskingFailure(exception)
         }
 
-        multiWorkerSimulationBehaviour(workerNeighbors, nextField)
+        multiWorkerSimulationBehaviour(workerNeighbors, nextField, next)
 
       case UpdateLeftSide(replyTo, side, duration) =>
+        context.log.info("[Iteration #{}] Received neighbor's right side in {}s", iteration, duration.toMillis / 1000f)
         if (neighborsSides._2.isDefined) {
-//          context.log.debug("All neighbor sides are ready:\nLeft: {}\nRight: {}", side.beautify, neighborsSides._2.get.beautify)
-          val ((newField, population), iterationDuration) = Clock.withMeasuring {
-            computeNextIteration(field, side, neighborsSides._2.get)
+          context.pipeToSelf(computeNextIteration(field, side, neighborsSides._2.get)) {
+            case Success(result)    => IterationCompleted(replyTo, result)
+            case Failure(exception) => throw exception
           }
-          context.log.info("[Iteration] Completed in {}s with {} population", iterationDuration.toMillis / 1000f, population)
 
-          replyTo ! WorkerIterationResult(context.self, WorkerIterationStats(iterationDuration, population))
-
-          multiWorkerSimulationBehaviour(workerNeighbors, field, (None, None), newField)
-        } else {
-          context.log.info("[Iteration] Received neighbor's right side in {}s", duration.toMillis / 1000f)
-          multiWorkerSimulationBehaviour(workerNeighbors, field, neighborsSides.copy(_1 = Some(side)))
-        }
+          Behaviors.same
+        } else
+          multiWorkerSimulationBehaviour(workerNeighbors, field, iteration, neighborsSides.copy(_1 = Some(side)))
 
       case UpdateRightSide(replyTo, side, duration) =>
+        context.log.info("[Iteration #{}] Received neighbor's left side in {}s", iteration, duration.toMillis / 1000f)
         if (neighborsSides._1.isDefined) {
-//          context.log.debug("All neighbor sides are ready:\nLeft: {}\nRight: {}", neighborsSides._1.get.beautify, side.beautify)
-          val ((newField, population), iterationDuration) = Clock.withMeasuring {
-            computeNextIteration(field, side, neighborsSides._1.get)
+          context.pipeToSelf(computeNextIteration(field, side, neighborsSides._1.get)) {
+            case Success(result)    => IterationCompleted(replyTo, result)
+            case Failure(exception) => throw exception
           }
-          context.log.info("[Iteration] Completed in {}s with {} population", iterationDuration.toMillis / 1000f, population)
 
-          replyTo ! WorkerIterationResult(context.self, WorkerIterationStats(iterationDuration, population))
+          Behaviors.same
+        } else
+          multiWorkerSimulationBehaviour(workerNeighbors, field, iteration, neighborsSides.copy(_2 = Some(side)))
 
-          multiWorkerSimulationBehaviour(workerNeighbors, field, (None, None), newField)
-        } else {
-          context.log.info("[Iteration] Received neighbor's left side in {}s", duration.toMillis / 1000f)
-          multiWorkerSimulationBehaviour(workerNeighbors, field, neighborsSides.copy(_2 = Some(side)))
-        }
+      case IterationCompleted(replyTo, result) =>
+        context.log.info("[Iteration #{}] Completed in {}s with {} population", iteration, result._3.toMillis / 1000f, result._2)
+
+        replyTo ! WorkerIterationResult(context.self, WorkerIterationStats(result._3, result._2))
+        multiWorkerSimulationBehaviour(workerNeighbors, field, iteration, (None, None), result._1)
 
       case TellFieldLeftSide(replyTo) =>
         replyTo ! field.map(_.head).toList
@@ -196,17 +195,21 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
         replyTo ! WorkerBehaviour.Processing(standAlone = true)
         Behaviors.same
 
-      case NextIteration(replyTo) =>
-        context.log.debug("[Iteration] Received NextIteration command")
-        val ((newField, population), duration) = Clock.withMeasuring {
-          computeNextIteration(field, Nil, Nil, standAlone = true)
+      case NextIteration(replyTo, next) =>
+        context.log.debug("[Iteration #{}] Received NextIteration command", next)
+
+        context.pipeToSelf(computeNextIteration(field, Nil, Nil, standAlone = true)) {
+          case Success(result)    => IterationCompleted(replyTo, result)
+          case Failure(exception) => throw exception
         }
 
-        replyTo ! WorkerIterationResult(context.self, WorkerIterationStats(duration, population))
-
-        singleWorkerSimulationBehaviour(newField)
+        Behaviors.same
 
       case newSimulation: NewSimulation => handleNewSimulationCommand(newSimulation, initialBehaviour())
+
+      case IterationCompleted(replyTo, result) =>
+        replyTo ! WorkerIterationResult(context.self, WorkerIterationStats(result._3, result._2))
+        singleWorkerSimulationBehaviour(result._1)
 
       case ShowYourField => handleShowCommand(field)
 

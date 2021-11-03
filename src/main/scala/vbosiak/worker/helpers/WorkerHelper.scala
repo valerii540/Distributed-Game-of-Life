@@ -3,10 +3,14 @@ package vbosiak.worker.helpers
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.cluster.typed.{Cluster, Leave}
+import vbosiak.common.utils.Clock
 import vbosiak.common.utils.FieldFormatter._
 import vbosiak.worker.actors.Worker._
 
 import scala.collection.immutable.ArraySeq
+import scala.collection.parallel.CollectionConverters._
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future}
 
 private[worker] trait WorkerHelper {
   implicit val context: ActorContext[WorkerCommand]
@@ -39,36 +43,40 @@ private[worker] trait WorkerHelper {
       leftSide: Side,
       rightSide: Side,
       standAlone: Boolean = false
-  ): (Field, Int) = {
-    val fieldCopy  = field.map(_.toArray)
-    var population = 0
+  )(implicit ec: ExecutionContext): Future[(Field, Int, FiniteDuration)] = Future {
+    val ((finishedField, population), duration) = Clock.withMeasuring {
 
-    for (r <- field.indices; c <- field(r).indices) {
-      val isAlive = field(r)(c)
+      val fieldCopy  = field.map(_.toArray)
+      var population = 0 //TODO: multi-threading trouble? Maybe AtomicInt?
 
-      val aliveNeighbors: Int = Seq(
-        computeCell(field, r - 1, c, standAlone),                // top
-        computeCell(field, r + 1, c, standAlone),                // bottom
-        computeCell(field, r, c + 1, standAlone, rightSide),     // right
-        computeCell(field, r, c - 1, standAlone, leftSide),      // left
-        computeCell(field, r - 1, c + 1, standAlone, rightSide), // top-right
-        computeCell(field, r - 1, c - 1, standAlone, leftSide),  // top-left
-        computeCell(field, r + 1, c + 1, standAlone, rightSide), // bottom-right
-        computeCell(field, r + 1, c - 1, standAlone, leftSide)   // bottom-left
-      ).count(identity)
+      field.zipWithIndex.par.foreach { case (row, r) =>
+        for (c <- row.indices) {
+          val isAlive = row(c)
 
-      if (isAlive && (aliveNeighbors == 2 || aliveNeighbors == 3))
-        population += 1
-      else if (!isAlive && aliveNeighbors == 3) {
-        fieldCopy(r)(c) = true
-        population += 1
-      } else
-        fieldCopy(r)(c) = false
+          val aliveNeighbors: Int = Seq(
+            computeCell(field, r - 1, c, standAlone),                // top
+            computeCell(field, r + 1, c, standAlone),                // bottom
+            computeCell(field, r, c + 1, standAlone, rightSide),     // right
+            computeCell(field, r, c - 1, standAlone, leftSide),      // left
+            computeCell(field, r - 1, c + 1, standAlone, rightSide), // top-right
+            computeCell(field, r - 1, c - 1, standAlone, leftSide),  // top-left
+            computeCell(field, r + 1, c + 1, standAlone, rightSide), // bottom-right
+            computeCell(field, r + 1, c - 1, standAlone, leftSide)   // bottom-left
+          ).count(identity)
+
+          if (isAlive && (aliveNeighbors == 2 || aliveNeighbors == 3))
+            population += 1
+          else if (!isAlive && aliveNeighbors == 3) {
+            fieldCopy(r)(c) = true
+            population += 1
+          } else
+            fieldCopy(r)(c) = false
+        }
+      }
+
+      fieldCopy.map(_.to(ArraySeq)) -> population
     }
-
-    val finishedField = fieldCopy.map(_.to(ArraySeq))
-
-    finishedField -> population
+    (finishedField, population, duration)
   }
 
   def computeCell(field: Field, r: Int, c: Int, standAlone: Boolean, neighborSide: Side = Nil): Boolean =

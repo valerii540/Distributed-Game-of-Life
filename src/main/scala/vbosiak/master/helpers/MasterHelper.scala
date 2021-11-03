@@ -72,7 +72,7 @@ trait MasterHelper {
         case Success(_)         =>
           Future
             .traverse(workers) { case (worker, _) =>
-              worker.actor.ask(Worker.NextIteration).transform {
+              worker.actor.ask(Worker.NextIteration(_, 0)).transform {
                 case Success(stats) =>
                   if (stats.stats.population != 20)
                     logger.warn("[Self-test] Bad population check - {} from {}", stats.stats.population, worker.actor.path.name)

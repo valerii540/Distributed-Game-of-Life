@@ -19,7 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object Master {
-  final case class State(iteration: Long)
+  final case class State(iteration: Int)
 
   /** Responses for MaterController */
   sealed trait ControllerResponse
@@ -217,14 +217,14 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
         Behaviors.same
 
       case NextIteration() =>
-        nextIteration(active)
+        nextIteration(active, state.iteration + 1)
 
         fastestModeBehaviour(active, inactive, state.copy(iteration = state.iteration + 1))
 
       case IterationDone(results, duration) =>
         iterationDoneLog(results, state, duration)
 
-        nextIteration(active)
+        nextIteration(active, state.iteration + 1)
 
         fastestModeBehaviour(active, inactive, state.copy(iteration = state.iteration + 1))
 
@@ -281,7 +281,7 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
           Behaviors.same
         } else {
           context.log.info("Triggering iteration #{}", state.iteration + 1)
-          nextIteration(active)
+          nextIteration(active, state.iteration + 1)
 
           replyTo ! OK
 
@@ -375,11 +375,11 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
     }
   }
 
-  private[this] def nextIteration(workers: Set[WorkerRep]): Unit = {
+  private[this] def nextIteration(workers: Set[WorkerRep], next: Int): Unit = {
     implicit val timeout: Timeout = 10.minute
     val startedAt                 = System.nanoTime()
     Future
-      .traverse(workers)(_.actor.ask(Worker.NextIteration))
+      .traverse(workers)(_.actor.ask(Worker.NextIteration(_, next)))
       .onComplete {
         case Success(stats)     => context.self ! IterationDone(stats, Duration(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS))
         case Failure(exception) => throw exception

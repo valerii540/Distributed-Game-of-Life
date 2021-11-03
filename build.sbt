@@ -18,6 +18,7 @@ libraryDependencies ++= {
   val scalaLogging   = "3.9.4"
   val enumeratum     = "1.7.0"
   val akkaPlayJson   = "1.38.2"
+  val scalaParallel  = "1.0.4"
 
   val scalaTest = "3.2.10"
 
@@ -31,6 +32,7 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,
     "com.lightbend.akka.management" %% "akka-management-cluster-http" % akkaManagement,
+    "org.scala-lang.modules"        %% "scala-parallel-collections"   % scalaParallel,
     "com.beachape"                  %% "enumeratum"                   % enumeratum,
     "com.beachape"                  %% "enumeratum-play-json"         % enumeratum,
     "de.heikoseeberger"             %% "akka-http-play-json"          % akkaPlayJson,
