@@ -7,6 +7,7 @@ import vbosiak.common.utils.Clock
 import vbosiak.common.utils.FieldFormatter._
 import vbosiak.worker.actors.Worker._
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.ArraySeq
 import scala.collection.parallel.CollectionConverters._
 import scala.concurrent.duration.FiniteDuration
@@ -47,7 +48,7 @@ private[worker] trait WorkerHelper {
     val ((finishedField, population), duration) = Clock.withMeasuring {
 
       val fieldCopy  = field.map(_.toArray)
-      var population = 0 //TODO: multi-threading trouble? Maybe AtomicInt?
+      val population = new AtomicInteger(0)
 
       field.zipWithIndex.par.foreach { case (row, r) =>
         for (c <- row.indices) {
@@ -65,16 +66,16 @@ private[worker] trait WorkerHelper {
           ).count(identity)
 
           if (isAlive && (aliveNeighbors == 2 || aliveNeighbors == 3))
-            population += 1
+            population.incrementAndGet()
           else if (!isAlive && aliveNeighbors == 3) {
             fieldCopy(r)(c) = true
-            population += 1
+            population.incrementAndGet()
           } else
             fieldCopy(r)(c) = false
         }
       }
 
-      fieldCopy.map(_.to(ArraySeq)) -> population
+      fieldCopy.map(_.to(ArraySeq)) -> population.get()
     }
     (finishedField, population, duration)
   }
