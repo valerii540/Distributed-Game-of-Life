@@ -39,6 +39,7 @@ libraryDependencies ++= {
     "ch.qos.logback"                 % "logback-classic"              % logback,
     "com.typesafe.scala-logging"    %% "scala-logging"                % scalaLogging,
     "org.scalatest"                 %% "scalatest-wordspec"           % scalaTest % Test,
-    "org.scalatest"                 %% "scalatest-mustmatchers"       % scalaTest % Test
+    "org.scalatest"                 %% "scalatest-mustmatchers"       % scalaTest % Test,
+    "com.typesafe.akka"             %% "akka-actor-testkit-typed"     % akka      % Test
   )
 }

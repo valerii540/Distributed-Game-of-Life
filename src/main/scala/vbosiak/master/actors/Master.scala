@@ -7,15 +7,13 @@ import akka.cluster.typed._
 import akka.util.Timeout
 import vbosiak.common.models._
 import vbosiak.master.actors.Master.MasterCommand
-import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, WorkerResponse}
+import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse}
 import vbosiak.master.helpers.MasterHelper
 import vbosiak.master.models.{Mode, Size, UserParameters}
-import vbosiak.worker.actors.Worker
 import vbosiak.worker.actors.Worker._
 
-import java.util.concurrent.TimeUnit
-import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success}
 
 object Master {
@@ -57,12 +55,11 @@ object Master {
     }
 }
 
-final class Master()(override implicit val context: ActorContext[MasterCommand]) extends MasterHelper {
+private final class Master()(override implicit val context: ActorContext[MasterCommand]) extends MasterHelper {
   import Master._
-  import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 
-  private[this] implicit val ec: ExecutionContext         = context.executionContext
-  private[this] implicit val system: ActorSystem[Nothing] = context.system
+  override implicit val ec: ExecutionContext         = context.executionContext
+  override implicit val system: ActorSystem[Nothing] = context.system
 
   def setupLifeCycle(
       workers: Set[WorkerRep]
@@ -213,13 +210,8 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
           duration.toMillis / 1000f,
           population
         )
-        context.self ! NextIteration()
-        Behaviors.same
-
-      case NextIteration() =>
         nextIteration(active, state.iteration + 1)
-
-        fastestModeBehaviour(active, inactive, state.copy(iteration = state.iteration + 1))
+        Behaviors.same
 
       case IterationDone(results, duration) =>
         iterationDoneLog(results, state, duration)
@@ -373,75 +365,5 @@ final class Master()(override implicit val context: ActorContext[MasterCommand])
       )
       Behaviors.same
     }
-  }
-
-  private[this] def nextIteration(workers: Set[WorkerRep], next: Int): Unit = {
-    implicit val timeout: Timeout = 10.minute
-    val startedAt                 = System.nanoTime()
-    Future
-      .traverse(workers)(_.actor.ask(Worker.NextIteration(_, next)))
-      .onComplete {
-        case Success(stats)     => context.self ! IterationDone(stats, Duration(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS))
-        case Failure(exception) => throw exception
-      }
-  }
-
-  private[this] def iterationDoneLog(results: Set[WorkerIterationResult], state: State, duration: FiniteDuration): Unit = {
-    context.log.info(
-      "Iteration #{} completed at {}s with {} population remaining",
-      state.iteration,
-      duration.toMillis / 1000f,
-      results.foldLeft(0L)((acc, res) => acc + res.stats.population)
-    )
-    results.foreach { result =>
-      context.log.debug(
-        "Worker {} completed iteration #{} at {}s with {} population remaining",
-        result.ref.path.name,
-        state.iteration,
-        result.stats.duration.toMillis / 1000f,
-        result.stats.population
-      )
-    }
-  }
-
-  private[this] def tellClusterStatus(
-      replyTo: ActorRef[ClusterStatusResponse],
-      workers: Set[WorkerRep],
-      inactiveWorkers: Set[WorkerRep],
-      mode: Mode,
-      state: State
-  ): Behavior[MasterCommand] = {
-    val workersResponse = workers.map { rep =>
-      val neighbors =
-        if (rep.neighbors.isDefined)
-          List(
-            workers.find(_.actor == rep.neighbors.get.left).get.actor.path.name,
-            workers.find(_.actor == rep.neighbors.get.right).get.actor.path.name
-          )
-        else Nil
-
-      WorkerResponse(
-        ref = rep.actor,
-        neighbors = neighbors,
-        capabilities = rep.capabilities,
-        active = true
-      )
-    } ++ inactiveWorkers.map { rep =>
-      WorkerResponse(
-        ref = rep.actor,
-        neighbors = Nil,
-        capabilities = rep.capabilities,
-        active = false
-      )
-    }
-
-    replyTo ! ClusterStatusResponse(
-      status = ClusterStatus.Running,
-      mode = Some(mode),
-      iteration = Some(state.iteration),
-      workers = Some(workersResponse)
-    )
-
-    Behaviors.same
   }
 }

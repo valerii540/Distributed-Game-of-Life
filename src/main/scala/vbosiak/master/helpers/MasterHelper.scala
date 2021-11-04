@@ -1,16 +1,19 @@
 package vbosiak.master.helpers
 
-import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.ActorContext
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import org.slf4j.LoggerFactory
-import vbosiak.common.models.{Neighbors, WorkerRep}
+import vbosiak.common.models.{Neighbors, WorkerIterationResult, WorkerRep}
 import vbosiak.common.utils.Clock
-import vbosiak.master.actors.Master.{MasterCommand, PreparationDone}
-import vbosiak.master.models.{Size, UserParameters}
+import vbosiak.master.actors.Master.{IterationDone, MasterCommand, PreparationDone, State}
+import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, WorkerResponse}
+import vbosiak.master.models.{Mode, Size, UserParameters}
 import vbosiak.worker.actors.Worker
 
+import java.util.concurrent.TimeUnit
 import scala.collection.mutable
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -18,23 +21,30 @@ trait MasterHelper {
   import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 
   implicit val context: ActorContext[MasterCommand]
-  private implicit val system: ActorSystem[Nothing] = context.system
+  implicit val ec: ExecutionContext
+  implicit val system: ActorSystem[Nothing]
 
   def findStandAloneCandidate(size: Size, workers: Set[WorkerRep]): Option[WorkerRep] =
-    workers.find(_.capabilities.availableMemory >= size.area)
+    workers.toSeq.sortBy(_.capabilities.availableMemory).find(_.capabilities.availableMemory >= size.area)
 
   def divideUniverseBetweenWorkers(size: Size, workers: Set[WorkerRep]): Set[(WorkerRep, Size)] = {
     val workersQueue  = workers.to(mutable.Queue).sortBy(-_.capabilities.availableMemory)
     val chosenWorkers = {
       val queue = mutable.Queue.empty[(WorkerRep, Size)]
 
-      var neededCounter = size.area
-      while (neededCounter > 0) {
+      var widthCounter: Long = size.width
+      while (widthCounter > 0) {
         val next       = workersQueue.dequeue()
-        val width      = next.capabilities.availableMemory / size.height
-        val workerPart = Size(size.height, (if (width > neededCounter) neededCounter else width).toInt)
-
-        neededCounter -= workerPart.area
+        val maxWidth   = next.capabilities.availableMemory / size.height
+        val workerPart =
+          if (widthCounter - maxWidth > 0) {
+            widthCounter -= maxWidth
+            Size(size.height, maxWidth.toInt)
+          } else {
+            val s = Size(size.height, widthCounter.toInt)
+            widthCounter = 0
+            s
+          }
         queue += next -> workerPart
 
       }
@@ -61,6 +71,35 @@ trait MasterHelper {
           context.self ! PreparationDone(populations.foldLeft(0L)((a, p) => a + p), Clock.fromNano(System.nanoTime() - startedAt))
         case Failure(exception)   => throw exception
       }
+  }
+
+  def nextIteration(workers: Set[WorkerRep], next: Int): Unit = {
+    implicit val timeout: Timeout = 10.minute
+    val startedAt                 = System.nanoTime()
+    Future
+      .traverse(workers)(_.actor.ask(Worker.NextIteration(_, next)))
+      .onComplete {
+        case Success(stats)     => context.self ! IterationDone(stats, Duration(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS))
+        case Failure(exception) => throw exception
+      }
+  }
+
+  def iterationDoneLog(results: Set[WorkerIterationResult], state: State, duration: FiniteDuration): Unit = {
+    context.log.info(
+      "Iteration #{} completed at {}s with {} population remaining",
+      state.iteration,
+      duration.toMillis / 1000f,
+      results.foldLeft(0L)((acc, res) => acc + res.stats.population)
+    )
+    results.foreach { result =>
+      context.log.debug(
+        "Worker {} completed iteration #{} at {}s with {} population remaining",
+        result.ref.path.name,
+        state.iteration,
+        result.stats.duration.toMillis / 1000f,
+        result.stats.population
+      )
+    }
   }
 
   def askForSelfTest(workers: Set[(WorkerRep, Size)])(implicit ec: ExecutionContext, timeout: Timeout): Unit = {
@@ -90,5 +129,46 @@ trait MasterHelper {
             }
         case Failure(exception) => throw exception
       }
+  }
+
+  def tellClusterStatus(
+      replyTo: ActorRef[ClusterStatusResponse],
+      workers: Set[WorkerRep],
+      inactiveWorkers: Set[WorkerRep],
+      mode: Mode,
+      state: State
+  ): Behavior[MasterCommand] = {
+    val workersResponse = workers.map { rep =>
+      val neighbors =
+        if (rep.neighbors.isDefined)
+          List(
+            workers.find(_.actor == rep.neighbors.get.left).get.actor.path.name,
+            workers.find(_.actor == rep.neighbors.get.right).get.actor.path.name
+          )
+        else Nil
+
+      WorkerResponse(
+        ref = rep.actor,
+        neighbors = neighbors,
+        capabilities = rep.capabilities,
+        active = true
+      )
+    } ++ inactiveWorkers.map { rep =>
+      WorkerResponse(
+        ref = rep.actor,
+        neighbors = Nil,
+        capabilities = rep.capabilities,
+        active = false
+      )
+    }
+
+    replyTo ! ClusterStatusResponse(
+      status = ClusterStatus.Running,
+      mode = Some(mode),
+      iteration = Some(state.iteration),
+      workers = Some(workersResponse)
+    )
+
+    Behaviors.same
   }
 }
