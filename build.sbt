@@ -27,6 +27,7 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-cluster-sharding"        % akka,
     "com.typesafe.akka"             %% "akka-serialization-jackson"   % akka,
     "com.typesafe.akka"             %% "akka-actor-typed"             % akka,
+    "com.typesafe.akka"             %% "akka-stream-typed"            % akka,
     "com.typesafe.akka"             %% "akka-stream"                  % akka,
     "com.typesafe.akka"             %% "akka-http"                    % akkaHttp,
     "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
