@@ -17,7 +17,7 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success}
 
 object Master {
-  final case class State(iteration: Int)
+  final case class State(iteration: Int, population: Long)
 
   /** Responses for MaterController */
   sealed trait ControllerResponse
@@ -194,9 +194,9 @@ private final class Master()(override implicit val context: ActorContext[MasterC
 
     params.mode match {
       case Mode.Manual    =>
-        manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0), busy = false)
+        manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L), busy = false)
       case Mode.Fastest   =>
-        fastestModeBehaviour(activeWorkers, workers -- activeWorkers, State(0))
+        fastestModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L))
       case Mode.SoftTimed =>
         context.log.error("Soft-timed mode not implemented yet")
         Behaviors.same
@@ -222,7 +222,7 @@ private final class Master()(override implicit val context: ActorContext[MasterC
         fastestModeBehaviour(active, inactive, state.copy(iteration = state.iteration + 1))
 
       case TellClusterStatus(replyTo) =>
-        tellClusterStatus(replyTo, active, inactive, Mode.Fastest, state)
+        tellClusterStatus(replyTo, active, inactive, Mode.Fastest, busy = true, state)
 
       case PrepareSimulation(replyTo, _) =>
         replyTo ! AlreadyRunning
@@ -266,7 +266,7 @@ private final class Master()(override implicit val context: ActorContext[MasterC
           duration.toMillis / 1000f,
           population
         )
-        Behaviors.same
+        manualModeBehaviour(active, inactive, state.copy(population = population), busy)
 
       case ManualTrigger(replyTo) =>
         if (busy) {
@@ -278,16 +278,16 @@ private final class Master()(override implicit val context: ActorContext[MasterC
 
           replyTo ! OK
 
-          manualModeBehaviour(active, inactive, state.copy(iteration = state.iteration + 1), busy = true)
+          manualModeBehaviour(active, inactive, state, busy = true)
         }
 
       case IterationDone(results, duration) =>
         iterationDoneLog(results, state, duration)
 
-        manualModeBehaviour(active, inactive, state, busy = false)
+        manualModeBehaviour(active, inactive, State(state.iteration + 1, results.foldLeft(0L)((a, w) => a + w.stats.population)), busy = false)
 
       case TellClusterStatus(replyTo) =>
-        tellClusterStatus(replyTo, active, inactive, Mode.Manual, state)
+        tellClusterStatus(replyTo, active, inactive, Mode.Manual, busy, state)
 
       case PrepareSimulation(replyTo, _) =>
         replyTo ! AlreadyRunning

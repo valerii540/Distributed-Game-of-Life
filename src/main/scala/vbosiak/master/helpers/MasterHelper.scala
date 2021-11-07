@@ -136,6 +136,7 @@ trait MasterHelper {
       workers: Set[WorkerRep],
       inactiveWorkers: Set[WorkerRep],
       mode: Mode,
+      busy: Boolean,
       state: State
   ): Behavior[MasterCommand] = {
     val workersResponse = workers.map { rep =>
@@ -166,7 +167,9 @@ trait MasterHelper {
       status = ClusterStatus.Running,
       hash = workersResponse.hashCode(),
       mode = Some(mode),
+      busy = Option.when(mode == Mode.Manual)(busy),
       iteration = Some(state.iteration),
+      population = Some(state.population),
       workers = Some(workersResponse)
     )
 

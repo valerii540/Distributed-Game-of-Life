@@ -10,8 +10,10 @@ private[master] final case class ClusterStatusResponse(
     status: ClusterStatus,
     hash: Long,
     mode: Option[Mode] = None,
+    busy: Option[Boolean] = None,
     delay: Option[Int] = None,
     iteration: Option[Long] = None,
+    population: Option[Long] = None,
     workers: Option[Set[WorkerResponse]] = None,
     workersRaw: Option[Set[WorkerRep]] = None
 )
