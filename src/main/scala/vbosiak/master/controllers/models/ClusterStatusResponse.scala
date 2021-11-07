@@ -8,6 +8,7 @@ import vbosiak.worker.actors.Worker.WorkerCommand
 
 private[master] final case class ClusterStatusResponse(
     status: ClusterStatus,
+    hash: Long,
     mode: Option[Mode] = None,
     delay: Option[Int] = None,
     iteration: Option[Long] = None,

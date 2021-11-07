@@ -2,10 +2,8 @@ package vbosiak.master.controllers
 
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
@@ -68,11 +66,6 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
         get {
           implicit val timeout: Timeout = 5.seconds
           onSuccess(master.ask(Master.TellClusterStatus))(complete(_))
-        }
-      } ~
-      path("events") {
-        extractWebSocketUpgrade { upgrade =>
-          complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, Master.wsEventSource.map(e => TextMessage.Strict(e.toString))))
         }
       } ~
       managementRoutes

@@ -4,15 +4,12 @@ import akka.actor.typed.receptionist.Receptionist
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.typed._
-import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.typed.scaladsl.ActorSource
 import akka.util.Timeout
 import vbosiak.common.models._
 import vbosiak.master.actors.Master.MasterCommand
 import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse}
 import vbosiak.master.helpers.MasterHelper
-import vbosiak.master.models.{Mode, Size, UserParameters, WSEvent}
+import vbosiak.master.models.{Mode, Size, UserParameters}
 import vbosiak.worker.actors.Worker._
 
 import scala.concurrent.ExecutionContext
@@ -46,28 +43,19 @@ object Master {
   private[master] final case class ListingResponse(listing: Receptionist.Listing)                               extends MasterCommand
   private[master] final case class PreparationDone(population: Long, duration: FiniteDuration)                  extends MasterCommand
 
-  val wsEventSource: Source[WSEvent, ActorRef[WSEvent]] =
-    ActorSource.actorRef[WSEvent](
-      completionMatcher = PartialFunction.empty,
-      failureMatcher = PartialFunction.empty,
-      bufferSize = 100,
-      overflowStrategy = OverflowStrategy.fail
-    )
-
   def apply(cluster: Cluster): Behavior[MasterCommand] =
     Behaviors.setup { context =>
-      implicit val system: ActorSystem[Nothing] = context.system
       context.log.info("Hello, I'm master {} at {}", context.self, cluster.selfMember.address)
 
       val listingResponseAdapter = context.messageAdapter[Receptionist.Listing](ListingResponse)
 
       context.system.receptionist ! Receptionist.Subscribe(workerServiceKey, listingResponseAdapter)
 
-      new Master(wsEventSource.to(Sink.ignore).run())(context).setupLifeCycle(Set.empty)
+      new Master()(context).setupLifeCycle(Set.empty)
     }
 }
 
-private final class Master(wsActor: ActorRef[WSEvent])(override implicit val context: ActorContext[MasterCommand]) extends MasterHelper {
+private final class Master()(override implicit val context: ActorContext[MasterCommand]) extends MasterHelper {
   import Master._
 
   override implicit val ec: ExecutionContext         = context.executionContext
@@ -148,6 +136,7 @@ private final class Master(wsActor: ActorRef[WSEvent])(override implicit val con
         case TellClusterStatus(replyTo) =>
           replyTo ! ClusterStatusResponse(
             status = ClusterStatus.Idle,
+            hash = workers.hashCode(),
             workersRaw = Some(workers)
           )
 

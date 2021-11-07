@@ -164,6 +164,7 @@ trait MasterHelper {
 
     replyTo ! ClusterStatusResponse(
       status = ClusterStatus.Running,
+      hash = workersResponse.hashCode(),
       mode = Some(mode),
       iteration = Some(state.iteration),
       workers = Some(workersResponse)
