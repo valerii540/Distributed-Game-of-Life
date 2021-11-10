@@ -7,7 +7,7 @@ import akka.actor.typed.{ActorRef, Behavior}
 import akka.util.Timeout
 import vbosiak.common.models._
 import vbosiak.common.utils.{Clock, ResourcesInspector}
-import vbosiak.master.models.Size
+import vbosiak.master.controllers.models.Size
 import vbosiak.worker.actors.Worker.WorkerCommand
 import vbosiak.worker.helpers.WorkerHelper
 import vbosiak.worker.models.WorkerBehaviour

@@ -1,13 +1,15 @@
-package vbosiak.master.models
+package vbosiak.master.controllers.models
 
 import play.api.libs.json.{Format, Json}
 import vbosiak.common.models.CborSerializable
+import vbosiak.master.models.Mode
 
 final case class UserParameters(
     mode: Mode,
     delay: Option[Long],
     lifeFactor: Float,
     forceDistribution: Boolean,
+    writeLogFile: Boolean,
     preferredFieldSize: Option[Size],
     seed: Option[Int]
 )

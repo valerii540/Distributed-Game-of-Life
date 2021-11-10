@@ -7,8 +7,8 @@ import org.slf4j.LoggerFactory
 import vbosiak.common.models.{Neighbors, WorkerIterationResult, WorkerRep}
 import vbosiak.common.utils.Clock
 import vbosiak.master.actors.Master.{IterationDone, MasterCommand, PreparationDone, State}
-import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, WorkerResponse}
-import vbosiak.master.models.{Mode, Size, UserParameters}
+import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, Size, UserParameters, WorkerResponse}
+import vbosiak.master.models.Mode
 import vbosiak.worker.actors.Worker
 
 import java.util.concurrent.TimeUnit
@@ -84,7 +84,7 @@ trait MasterHelper {
       }
   }
 
-  def iterationDoneLog(results: Set[WorkerIterationResult], state: State, duration: FiniteDuration): Unit = {
+  def iterationDoneLog(results: Set[WorkerIterationResult], state: State, duration: FiniteDuration)(implicit logWriter: LogWriter): Unit = {
     context.log.info(
       "Iteration #{} completed at {}s with {} population remaining",
       state.iteration,
@@ -100,6 +100,8 @@ trait MasterHelper {
         result.stats.population
       )
     }
+
+    logWriter.writeLog(state.iteration, results)
   }
 
   def askForSelfTest(workers: Set[(WorkerRep, Size)])(implicit ec: ExecutionContext, timeout: Timeout): Unit = {

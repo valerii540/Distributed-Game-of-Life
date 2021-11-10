@@ -6,12 +6,13 @@ organization := "vbosiak"
 
 run / fork         := true
 run / connectInput := true
-run / javaOptions ++= Seq(s"-Xmx${sys.env("MAX_MEMORY")}")
+run / javaOptions ++= Seq(s"-Xmx${sys.env.getOrElse("MAX_MEMORY", "4G")}")
 
 scalacOptions ++= Seq("-feature", "-Ywarn-dead-code", "-Ywarn-unused", "-deprecation", "-unchecked", "target:11")
 
 libraryDependencies ++= {
   val akka           = "2.6.17"
+  val alpakka        = "3.0.3"
   val akkaHttp       = "10.2.6"
   val akkaManagement = "1.1.1"
   val logback        = "1.2.6"
@@ -27,8 +28,8 @@ libraryDependencies ++= {
     "com.typesafe.akka"             %% "akka-cluster-sharding"        % akka,
     "com.typesafe.akka"             %% "akka-serialization-jackson"   % akka,
     "com.typesafe.akka"             %% "akka-actor-typed"             % akka,
-    "com.typesafe.akka"             %% "akka-stream-typed"            % akka,
     "com.typesafe.akka"             %% "akka-stream"                  % akka,
+    "com.lightbend.akka"            %% "akka-stream-alpakka-csv"      % alpakka,
     "com.typesafe.akka"             %% "akka-http"                    % akkaHttp,
     "com.typesafe.akka"             %% "akka-http-spray-json"         % akkaHttp,
     "com.lightbend.akka.management" %% "akka-management"              % akkaManagement,

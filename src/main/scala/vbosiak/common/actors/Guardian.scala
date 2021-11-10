@@ -21,7 +21,7 @@ object Guardian {
       if (cluster.selfMember.hasRole("master")) {
         val managementRoutes = AkkaManagement(context.system).routes
 
-        val masterRef = context.spawn(Master(cluster), "master")
+        val masterRef = context.spawn(Master(), "master")
 
         implicit val system: ActorSystem[Nothing] = context.system
         val masterController                      = new MasterController(masterRef)

@@ -9,7 +9,8 @@ import com.typesafe.scalalogging.LazyLogging
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import vbosiak.master.actors.Master
 import vbosiak.master.actors.Master.MasterCommand
-import vbosiak.master.models.{Mode, UserParameters}
+import vbosiak.master.controllers.models.UserParameters
+import vbosiak.master.models.Mode
 
 import scala.concurrent.duration.DurationInt
 

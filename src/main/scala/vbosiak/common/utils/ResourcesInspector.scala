@@ -3,7 +3,7 @@ package vbosiak.common.utils
 import com.typesafe.scalalogging.StrictLogging
 import vbosiak.common.models.Capabilities
 import vbosiak.common.utils.ConfigProvider._
-import vbosiak.master.models.Size
+import vbosiak.master.controllers.models.Size
 
 object ResourcesInspector extends StrictLogging {
   private val preservedBytes = ConfigProvider.config.getBytes("simulation.worker.resources.preserved")
@@ -34,7 +34,7 @@ object ResourcesInspector extends StrictLogging {
     val maxMemory = Runtime.getRuntime.maxMemory()
 
     if (maxMemory <= preservedBytes)
-      throw new OutOfMemoryError("Max memory is lower than preserved")
+      throw new OutOfMemoryError(s"Max memory ($maxMemory) is lower than preserved")
 
     val availableMemory = if (sizeOverride.isDefined) sizeOverride.get.area else (maxMemory - preservedBytes) / 2
 

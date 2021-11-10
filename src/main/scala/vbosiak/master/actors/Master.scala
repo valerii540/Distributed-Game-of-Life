@@ -3,13 +3,12 @@ package vbosiak.master.actors
 import akka.actor.typed.receptionist.Receptionist
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
-import akka.cluster.typed._
 import akka.util.Timeout
 import vbosiak.common.models._
 import vbosiak.master.actors.Master.MasterCommand
-import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse}
-import vbosiak.master.helpers.MasterHelper
-import vbosiak.master.models.{Mode, Size, UserParameters}
+import vbosiak.master.controllers.models.{ClusterStatus, ClusterStatusResponse, Size, UserParameters}
+import vbosiak.master.helpers.{DummyWriter, LogWriter, LogWriterImpl, MasterHelper}
+import vbosiak.master.models.Mode
 import vbosiak.worker.actors.Worker._
 
 import scala.concurrent.ExecutionContext
@@ -43,9 +42,9 @@ object Master {
   private[master] final case class ListingResponse(listing: Receptionist.Listing)                               extends MasterCommand
   private[master] final case class PreparationDone(population: Long, duration: FiniteDuration)                  extends MasterCommand
 
-  def apply(cluster: Cluster): Behavior[MasterCommand] =
+  def apply(): Behavior[MasterCommand] =
     Behaviors.setup { context =>
-      context.log.info("Hello, I'm master {} at {}", context.self, cluster.selfMember.address)
+      context.log.info("Master actor has been deployed - {}", context.self)
 
       val listingResponseAdapter = context.messageAdapter[Receptionist.Listing](ListingResponse)
 
@@ -192,6 +191,9 @@ private final class Master()(override implicit val context: ActorContext[MasterC
         case (None, false) => ???
       }
 
+    implicit val logWriter: LogWriter = if (params.writeLogFile) new LogWriterImpl() else DummyWriter
+    logWriter.writeHeader(activeWorkers.map(_.actor.path.name))
+
     params.mode match {
       case Mode.Manual    =>
         manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L), busy = false)
@@ -203,7 +205,9 @@ private final class Master()(override implicit val context: ActorContext[MasterC
     }
   }
 
-  private[this] def fastestModeBehaviour(active: Set[WorkerRep], inactive: Set[WorkerRep], state: State): Behavior[MasterCommand] =
+  private[this] def fastestModeBehaviour(active: Set[WorkerRep], inactive: Set[WorkerRep], state: State)(implicit
+      logWriter: LogWriter
+  ): Behavior[MasterCommand] =
     Behaviors.receiveMessage {
       case PreparationDone(population, duration) =>
         context.log.info(
@@ -258,7 +262,7 @@ private final class Master()(override implicit val context: ActorContext[MasterC
       inactive: Set[WorkerRep],
       state: State,
       busy: Boolean
-  ): Behavior[MasterCommand] =
+  )(implicit logWriter: LogWriter): Behavior[MasterCommand] =
     Behaviors.receiveMessage {
       case PreparationDone(population, duration) =>
         context.log.info(
@@ -323,7 +327,7 @@ private final class Master()(override implicit val context: ActorContext[MasterC
       mode: Mode,
       busy: Option[Boolean] = None,
       delay: Option[FiniteDuration] = None
-  ): Behavior[MasterCommand] = {
+  )(implicit logWriter: LogWriter): Behavior[MasterCommand] = {
     val activeWorkers       = active.map(_.actor)
     val inactiveWorkers     = inactive.map(_.actor)
     val newWorkers          = actual -- (activeWorkers ++ inactiveWorkers)

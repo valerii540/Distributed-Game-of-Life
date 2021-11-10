@@ -8,13 +8,13 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import vbosiak.common.models.{Capabilities, Neighbors, WorkerRep}
 import vbosiak.master.actors.Master
-import vbosiak.master.models.Size
+import vbosiak.master.controllers.models.Size
 import vbosiak.worker.actors.Worker.WorkerCommand
 
 import scala.concurrent.ExecutionContext
 
 final class MasterHelperSpec extends AnyWordSpecLike with Matchers with BeforeAndAfterAll {
-  private val testKit  = ActorTestKit()
+  private val testKit = ActorTestKit()
 
   private val masterHelper = new MasterHelper {
     // We don't test master behaviour here
