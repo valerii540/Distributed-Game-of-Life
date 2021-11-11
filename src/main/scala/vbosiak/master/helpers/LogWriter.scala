@@ -7,7 +7,8 @@ import vbosiak.common.models.WorkerIterationResult
 import vbosiak.common.utils.ConfigProvider
 
 import java.nio.file.{Paths, StandardOpenOption}
-import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset, ZonedDateTime}
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
@@ -21,9 +22,13 @@ object DummyWriter extends LogWriter {
   override def writeLog(iteration: Long, results: Set[WorkerIterationResult]): Unit = ()
 }
 
+//TODO: switch implementation to Source.queue or Java style approach
 final class LogWriterImpl()(implicit system: ActorSystem[Nothing]) extends LogWriter {
-  private val destination                   = Paths.get(ConfigProvider.config.getString("simulation.master.log-writer.destination"))
-  system.log.warn(destination.toString)
+  private lazy val destination = {
+    val dateTime = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+    Paths.get(ConfigProvider.config.getString("simulation.master.log-writer.destination") + s"simulation-$dateTime.csv")
+  }
+
   private implicit val ec: ExecutionContext = system.executionContext //TODO: use separate EC for blocking ops
 
   override def writeHeader(workers: Set[String]): Unit = {
