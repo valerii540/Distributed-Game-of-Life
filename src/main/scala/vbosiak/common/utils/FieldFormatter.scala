@@ -1,12 +1,14 @@
 package vbosiak.common.utils
 
+import vbosiak.master.controllers.models.Size
 import vbosiak.worker.actors.Worker.{Field, Side}
+import vbosiak.worker.helpers.Universe
 
-import scala.collection.immutable.ArraySeq
+import scala.collection.immutable.{ArraySeq, BitSet}
 
 object FieldFormatter {
-  private val deadCellSymbol  = "-"
-  private val aliveCellSymbol = Console.GREEN + " o" + Console.RESET
+  val deadCellSymbol: String  = "-"
+  val aliveCellSymbol: String = Console.GREEN + " o" + Console.RESET
 
   implicit class FieldExtensions(field: Field) {
     def beautify: String = {
@@ -18,6 +20,16 @@ object FieldFormatter {
       (header +: withRowN)
         .map(_.mkString(" "))
         .mkString("\n")
+    }
+
+    def toUniverse(standAlone: Boolean): Universe = {
+      val rows = field.map { row =>
+        row.zipWithIndex.collect {
+          case (true, c) => c
+        }.to(BitSet)
+      }
+
+      Universe(rows, Size(field.size, field.head.size), standAlone)
     }
   }
 

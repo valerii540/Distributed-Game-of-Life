@@ -6,9 +6,12 @@ organization := "vbosiak"
 
 run / fork         := true
 run / connectInput := true
-run / javaOptions ++= Seq(s"-Xmx${sys.env.getOrElse("MAX_MEMORY", "4G")}")
+run / javaOptions ++= Seq(s"-Xmx${sys.env.getOrElse("MAX_MEMORY", "8G")}")
 
-scalacOptions ++= Seq("-feature", "-Ywarn-dead-code", "-Ywarn-unused", "-deprecation", "-unchecked", "target:11")
+Test / fork := true
+Test / run / javaOptions += s"-Xmx8G"
+
+scalacOptions ++= Seq("-feature", "-Ywarn-dead-code", "-Ywarn-unused", "-deprecation", "-unchecked", "target:11", "-opt:inline", "-opt:l:method")
 
 libraryDependencies ++= {
   val akka           = "2.6.17"

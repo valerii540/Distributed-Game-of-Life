@@ -9,7 +9,7 @@ import vbosiak.common.models._
 import vbosiak.common.utils.{Clock, ResourcesInspector}
 import vbosiak.master.controllers.models.Size
 import vbosiak.worker.actors.Worker.WorkerCommand
-import vbosiak.worker.helpers.WorkerHelper
+import vbosiak.worker.helpers.{GameOfLife, WorkerHelper}
 import vbosiak.worker.models.WorkerBehaviour
 
 import scala.collection.immutable.ArraySeq
@@ -20,7 +20,7 @@ import scala.util.{Failure, Random, Success}
 object Worker {
   type WorkerId       = String
   type Field          = ArraySeq[ArraySeq[Boolean]]
-  type Side           = List[Boolean]
+  type Side           = ArraySeq[Boolean]
   type NeighborsSides = (Option[Side], Option[Side])
 
   val workerServiceKey: ServiceKey[WorkerCommand] = ServiceKey("worker")
@@ -35,8 +35,8 @@ object Worker {
   final case class NewSimulation(replyTo: ActorRef[Int], fieldSize: Size, lifeFactor: Float, neighbors: Option[Neighbors], seed: Option[Int])
       extends WorkerCommand
   final case class NextIteration(replyTo: ActorRef[WorkerIterationResult], next: Int) extends WorkerCommand
-  final case class TellFieldLeftSide(replyTo: ActorRef[Side])                         extends WorkerCommand
-  final case class TellFieldRightSide(replyTo: ActorRef[Side])                        extends WorkerCommand
+  final case class TellFieldLeftSide(replyTo: ActorRef[List[Boolean]])                extends WorkerCommand
+  final case class TellFieldRightSide(replyTo: ActorRef[List[Boolean]])               extends WorkerCommand
 
   case object ShowYourField                                                       extends WorkerCommand
   final case class PrepareSelfTest(replyTo: ActorRef[Done], neighbors: Neighbors) extends WorkerCommand
@@ -97,7 +97,7 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
       case PrepareSelfTest(replyTo, neighbors) =>
         context.log.info("[Self-test] Preparing self-test with neighbors: {}", neighbors)
         replyTo ! Done
-        multiWorkerSimulationBehaviour(neighbors, ArraySeq.empty, 0, (None, None), generateStableTestSample)
+        multiWorkerSimulationBehaviour(neighbors, ArraySeq.empty, 0, (None, None), GameOfLife.generateStableTestSample)
 
       case Die(reason) => handleDieCommand(reason)
 
@@ -122,13 +122,17 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
         val statedAt                  = System.nanoTime()
         // Ask left worker about it's right side
         context.ask(workerNeighbors.left, TellFieldRightSide) {
-          case Success(side)      => UpdateLeftSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
+          case Success(side)      =>
+            val converted = side.to(ArraySeq)
+            UpdateLeftSide(replyTo, converted, Clock.fromNano(System.nanoTime() - statedAt))
           case Failure(exception) => AskingFailure(exception)
         }
 
         // Ask right worker about it's left side
         context.ask(workerNeighbors.right, TellFieldLeftSide) {
-          case Success(side)      => UpdateRightSide(replyTo, side, Clock.fromNano(System.nanoTime() - statedAt))
+          case Success(side)      =>
+            val converted = side.to(ArraySeq)
+            UpdateRightSide(replyTo, converted, Clock.fromNano(System.nanoTime() - statedAt))
           case Failure(exception) => AskingFailure(exception)
         }
 
@@ -137,7 +141,7 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
       case UpdateLeftSide(replyTo, side, duration) =>
         context.log.info("[Iteration #{}] Received neighbor's right side in {}s", iteration, duration.toMillis / 1000f)
         if (neighborsSides._2.isDefined) {
-          context.pipeToSelf(computeNextIteration(field, side, neighborsSides._2.get)) {
+          context.pipeToSelf(GameOfLife.computeNextIteration(field, side, neighborsSides._2.get)) {
             case Success(result)    => IterationCompleted(replyTo, result)
             case Failure(exception) => throw exception
           }
@@ -149,7 +153,7 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
       case UpdateRightSide(replyTo, side, duration) =>
         context.log.info("[Iteration #{}] Received neighbor's left side in {}s", iteration, duration.toMillis / 1000f)
         if (neighborsSides._1.isDefined) {
-          context.pipeToSelf(computeNextIteration(field, side, neighborsSides._1.get)) {
+          context.pipeToSelf(GameOfLife.computeNextIteration(field, side, neighborsSides._1.get)) {
             case Success(result)    => IterationCompleted(replyTo, result)
             case Failure(exception) => throw exception
           }
@@ -198,7 +202,7 @@ private final class Worker()(override implicit val context: ActorContext[WorkerC
       case NextIteration(replyTo, next) =>
         context.log.debug("[Iteration #{}] Received NextIteration command", next)
 
-        context.pipeToSelf(computeNextIteration(field, Nil, Nil, standAlone = true)) {
+        context.pipeToSelf(GameOfLife.computeNextIteration(field, ArraySeq.empty, ArraySeq.empty, standAlone = true)) {
           case Success(result)    => IterationCompleted(replyTo, result)
           case Failure(exception) => throw exception
         }
