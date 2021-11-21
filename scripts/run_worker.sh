@@ -11,4 +11,4 @@ if [ -n "$4" ] && [ -n "$5" ]; then
   export OVERRIDE_WIDTH=$5
 fi
 
-sbt
+mill -i app.runLocal
