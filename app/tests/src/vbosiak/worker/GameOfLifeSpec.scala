@@ -1,21 +1,15 @@
-package vbosiak.worker.actors
+package vbosiak.worker
 
-import akka.actor.typed.scaladsl.ActorContext
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import vbosiak.common.utils.FieldFormatter._
-import vbosiak.worker.actors.Worker.{Field, Side, WorkerCommand}
-import vbosiak.worker.helpers.WorkerHelper
+import vbosiak.worker.actors.Worker.{Field, Side}
+import vbosiak.worker.helpers.GameOfLife
 
 import scala.collection.immutable.{ArraySeq, SortedMap}
 import scala.reflect.ClassTag
 
 final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
-  private val workerHelper = new WorkerHelper {
-    // game of life computing does not require actor context
-    override implicit val context: ActorContext[WorkerCommand] = null
-  }
-
   private def withDetails[T](initial: Field, computed: Field, expected: Field, sides: Option[(Side, Side)] = None, prefix: String = "")(
       fun: => T
   ): T =
@@ -27,8 +21,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, blinker test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, blinker test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -41,8 +35,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, block, horizontal closure test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, block, horizontal closure test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -55,8 +49,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, blocks, vertical closure test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, blocks, vertical closure test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -69,8 +63,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, blinker, vertical & horizontal closure test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, blinker, vertical & horizontal closure test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -83,8 +77,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, glider test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, glider test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -97,8 +91,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
       "compute next iteration for 5x5, block, vertical & horizontal closure test correctly" in {
         val tCase = TestCases.nextIterationCases("5x5, block, vertical & horizontal closure test")
 
-        val computed    = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
-        val computedPar = workerHelper.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
+        val computed    = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right, inParallel = false)._1
+        val computedPar = GameOfLife.computeNextIteration(tCase.initial, tCase.left, tCase.right)._1
 
         withDetails(tCase.initial, computed, tCase.expected, Some(tCase.left, tCase.right), "[single thread]") {
           computed mustEqual tCase.expected
@@ -114,8 +108,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
         val tCase = TestCases.next5IterationsStandAloneCases("5x5, glider test")
 
         (0 until 5).foreach { i =>
-          val computed    = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true, inParallel = false)._1
-          val computedPar = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
+          val computed    = GameOfLife.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true, inParallel = false)._1
+          val computedPar = GameOfLife.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
 
           withDetails(tCase.next5(i), computed, tCase.next5(i + 1), None, s"[$i, single thread]") {
             computed mustEqual tCase.next5(i + 1)
@@ -130,8 +124,8 @@ final class GameOfLifeSpec extends AnyWordSpecLike with Matchers {
         val tCase = TestCases.next5IterationsStandAloneCases("10x10, variable structures, vertical & horizontal closure test")
 
         (0 until 5).foreach { i =>
-          val computed    = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true, inParallel = false)._1
-          val computedPar = workerHelper.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
+          val computed    = GameOfLife.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true, inParallel = false)._1
+          val computedPar = GameOfLife.computeNextIteration(tCase.next5(i), ArraySeq.empty, ArraySeq.empty, standAlone = true)._1
 
           withDetails(tCase.next5(i), computed, tCase.next5(i + 1), None, s"[$i, single thread]") {
             computed mustEqual tCase.next5(i + 1)
