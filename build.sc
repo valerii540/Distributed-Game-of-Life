@@ -6,7 +6,7 @@ object versions {
   val scala = "2.13.7"
 
   val akka           = "2.6.17"
-  val alpakka        = "3.0.3"
+  val alpakka        = "3.0.4"
   val akkaHttp       = "10.2.7"
   val akkaManagement = "1.1.1"
   val logback        = "1.2.7"
