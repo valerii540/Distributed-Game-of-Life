@@ -113,24 +113,19 @@ private final class Master()(override implicit val context: ActorContext[MasterC
           if (workers.isEmpty) {
             controller ! NoWorkersInCluster
             Behaviors.same
-          } else
-            params.preferredFieldSize match {
-              case Some(size) =>
-                val neededResources    = size.area
-                val availableResources = workers.foldLeft(0L)((a, w) => a + w.capabilities.availableMemory)
-                if (availableResources < neededResources) {
-                  controller ! ImpossibleToProcess(
-                    s"Requested field size too big for current cluster. Requested bytes: $neededResources, available: $availableResources"
-                  )
-                  Behaviors.same
-                } else {
-                  controller ! OK
-                  prepareSimulation(workers, params)
-                }
-              case None       =>
-                controller ! OK
-                prepareSimulation(workers, params)
+          } else {
+            val neededResources    = params.preferredFieldSize.area
+            val availableResources = workers.foldLeft(0L)((a, w) => a + w.capabilities.availableMemory)
+            if (availableResources < neededResources) {
+              controller ! ImpossibleToProcess(
+                s"Requested field size too big for current cluster. Requested bytes: $neededResources, available: $availableResources"
+              )
+              Behaviors.same
+            } else {
+              controller ! OK
+              prepareSimulation(workers, params)
             }
+          }
 
         case TellClusterStatus(replyTo) =>
           replyTo ! ClusterStatusResponse(
@@ -169,35 +164,32 @@ private final class Master()(override implicit val context: ActorContext[MasterC
     implicit val workerPreparationTimeout: Timeout = 1.minute
 
     val activeWorkers: Set[WorkerRep] =
-      (params.preferredFieldSize, params.forceDistribution) match {
-        case (Some(size), true)  => ???
-        case (Some(size), false) =>
-          val chosenOnes = findStandAloneCandidate(size, workers)
-            .map(w => Set(w -> size))
-            .getOrElse(divideUniverseBetweenWorkers(size, workers))
+      if (params.forceDistribution)
+        ???
+      else {
+        val chosenOnes = findStandAloneCandidate(params.preferredFieldSize, workers)
+          .map(w => Set(w -> params.preferredFieldSize))
+          .getOrElse(divideUniverseBetweenWorkers(params.preferredFieldSize, workers))
 
-          context.log.info(
-            "{} worker(s) have been chosen to create a new divine {} universe: {}",
-            chosenOnes.size,
-            size.pretty,
-            chosenOnes.map(_._1.actor.path.name).mkString(", ")
-          )
-          context.log.debug("Chosen workers: {}", chosenOnes.map(ws => s"${ws._1.actor.path.name}: ${ws._2.pretty}").mkString(", "))
+        context.log.info(
+          "{} worker(s) have been chosen to create a new divine {} universe: {}",
+          chosenOnes.size,
+          params.preferredFieldSize.pretty,
+          chosenOnes.map(_._1.actor.path.name).mkString(", ")
+        )
+        context.log.debug("Chosen workers: {}", chosenOnes.map(ws => s"${ws._1.actor.path.name}: ${ws._2.pretty}").mkString(", "))
 
-          askForNewSimulation(chosenOnes, params)
-          chosenOnes.map(_._1)
-
-        case (None, true)  => ???
-        case (None, false) => ???
+        askForNewSimulation(chosenOnes, params)
+        chosenOnes.map(_._1)
       }
 
     implicit val logWriter: LogWriter = if (params.writeLogFile) new LogWriterImpl() else DummyWriter
     logWriter.writeHeader(activeWorkers.map(_.actor.path.name))
 
     params.mode match {
-      case Mode.Manual    =>
+      case Mode.Manual  =>
         manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L), busy = false)
-      case Mode.Fastest   =>
+      case Mode.Fastest =>
         fastestModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L))
     }
   }
@@ -351,8 +343,8 @@ private final class Master()(override implicit val context: ActorContext[MasterC
     } else if (lostInactiveWorkers.nonEmpty) {
       context.log.info("[Cluster changes] {} inactive worker(s) left the cluster during simulation. Continue", lostInactiveWorkers.size)
       mode match {
-        case Mode.Manual    => manualModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state, busy.get)
-        case Mode.Fastest   => fastestModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state)
+        case Mode.Manual  => manualModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state, busy.get)
+        case Mode.Fastest => fastestModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state)
       }
     } else {
       context.log.warn(

@@ -9,7 +9,7 @@ final case class UserParameters(
     lifeFactor: Float,
     forceDistribution: Boolean,
     writeLogFile: Boolean,
-    preferredFieldSize: Option[Size],
+    preferredFieldSize: Size,
     seed: Option[Int]
 )
 
