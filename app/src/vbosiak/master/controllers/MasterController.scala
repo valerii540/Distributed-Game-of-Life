@@ -10,7 +10,6 @@ import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import vbosiak.master.actors.Master
 import vbosiak.master.actors.Master.MasterCommand
 import vbosiak.master.controllers.models.UserParameters
-import vbosiak.master.models.Mode
 
 import scala.concurrent.duration.DurationInt
 
@@ -21,16 +20,12 @@ final class MasterController(master: ActorRef[MasterCommand])(implicit system: A
     path("simulation" / "init") {
       post {
         entity(as[UserParameters]) { params =>
-          if (params.mode == Mode.SoftTimed && params.delay.isEmpty)
-            complete(StatusCodes.BadRequest, "Missing the 'delay' parameter for soft-timed mode")
-          else {
-            implicit val timeout: Timeout = 30.seconds
-            onSuccess(master.ask(Master.PrepareSimulation(_, params))) {
-              case Master.OK                          => complete(StatusCodes.OK)
-              case Master.AlreadyRunning              => complete(StatusCodes.BadRequest, "Cluster already running a simulation")
-              case Master.ImpossibleToProcess(reason) => complete(StatusCodes.BadRequest, reason)
-              case Master.NoWorkersInCluster          => complete(StatusCodes.Conflict, "No workers connected to cluster")
-            }
+          implicit val timeout: Timeout = 30.seconds
+          onSuccess(master.ask(Master.PrepareSimulation(_, params))) {
+            case Master.OK                          => complete(StatusCodes.OK)
+            case Master.AlreadyRunning              => complete(StatusCodes.BadRequest, "Cluster already running a simulation")
+            case Master.ImpossibleToProcess(reason) => complete(StatusCodes.BadRequest, reason)
+            case Master.NoWorkersInCluster          => complete(StatusCodes.Conflict, "No workers connected to cluster")
           }
         }
       }

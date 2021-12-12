@@ -9,5 +9,4 @@ object Mode extends Enum[Mode] with PlayInsensitiveJsonEnum[Mode] {
 
   case object Manual    extends Mode
   case object Fastest   extends Mode
-  case object SoftTimed extends Mode
 }

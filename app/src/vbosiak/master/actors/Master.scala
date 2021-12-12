@@ -199,9 +199,6 @@ private final class Master()(override implicit val context: ActorContext[MasterC
         manualModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L), busy = false)
       case Mode.Fastest   =>
         fastestModeBehaviour(activeWorkers, workers -- activeWorkers, State(0, 0L))
-      case Mode.SoftTimed =>
-        context.log.error("Soft-timed mode not implemented yet")
-        Behaviors.same
     }
   }
 
@@ -325,8 +322,7 @@ private final class Master()(override implicit val context: ActorContext[MasterC
       actual: Set[ActorRef[WorkerCommand]],
       state: State,
       mode: Mode,
-      busy: Option[Boolean] = None,
-      delay: Option[FiniteDuration] = None
+      busy: Option[Boolean] = None
   )(implicit logWriter: LogWriter): Behavior[MasterCommand] = {
     val activeWorkers       = active.map(_.actor)
     val inactiveWorkers     = inactive.map(_.actor)
@@ -357,7 +353,6 @@ private final class Master()(override implicit val context: ActorContext[MasterC
       mode match {
         case Mode.Manual    => manualModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state, busy.get)
         case Mode.Fastest   => fastestModeBehaviour(active, inactive.filterNot(w => lostInactiveWorkers(w.actor)), state)
-        case Mode.SoftTimed => Behaviors.same
       }
     } else {
       context.log.warn(

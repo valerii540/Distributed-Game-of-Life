@@ -6,7 +6,6 @@ import vbosiak.master.models.Mode
 
 final case class UserParameters(
     mode: Mode,
-    delay: Option[Long],
     lifeFactor: Float,
     forceDistribution: Boolean,
     writeLogFile: Boolean,
